@@ -56,3 +56,11 @@ class StatsResponse(BaseModel):
     anomaly_count: int
     anomaly_rate: float
     last_ingest: Optional[str] = None
+
+
+class BenchmarkResult(BaseModel):
+    total_incidents: int
+    correct_root_cause: int
+    accuracy: float
+    baseline_openrca: float = 0.1134
+    per_incident: list
