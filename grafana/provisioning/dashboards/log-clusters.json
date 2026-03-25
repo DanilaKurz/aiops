@@ -1,0 +1,33 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "log-clusters",
+    "title": "Log Clusters",
+    "tags": ["aiops"],
+    "timezone": "browser",
+    "schemaVersion": 39,
+    "version": 1,
+    "panels": [
+      {
+        "id": 1,
+        "title": "Log Clusters",
+        "type": "table",
+        "datasource": {
+          "type": "yesoreyeram-infinity-datasource",
+          "uid": "aiops-service"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "type": "json",
+            "source": "url",
+            "url": "http://aiops-service:8081/clusters",
+            "format": "table"
+          }
+        ],
+        "gridPos": { "h": 16, "w": 24, "x": 0, "y": 0 }
+      }
+    ]
+  },
+  "overwrite": true
+}

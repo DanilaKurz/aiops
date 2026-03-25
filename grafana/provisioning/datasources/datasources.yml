@@ -1,0 +1,17 @@
+apiVersion: 1
+
+datasources:
+  - name: AIOps Service
+    type: yesoreyeram-infinity-datasource
+    uid: aiops-service
+    access: proxy
+    url: http://aiops-service:8081
+    isDefault: true
+    editable: true
+
+  - name: Keep API
+    type: yesoreyeram-infinity-datasource
+    uid: keep-api
+    access: proxy
+    url: http://keep-api:8080
+    editable: true

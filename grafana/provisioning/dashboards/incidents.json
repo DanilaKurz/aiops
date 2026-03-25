@@ -1,0 +1,33 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "incidents",
+    "title": "Incidents",
+    "tags": ["aiops"],
+    "timezone": "browser",
+    "schemaVersion": 39,
+    "version": 1,
+    "panels": [
+      {
+        "id": 1,
+        "title": "Incidents",
+        "type": "table",
+        "datasource": {
+          "type": "yesoreyeram-infinity-datasource",
+          "uid": "keep-api"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "type": "json",
+            "source": "url",
+            "url": "http://keep-api:8080/incidents",
+            "format": "table"
+          }
+        ],
+        "gridPos": { "h": 16, "w": 24, "x": 0, "y": 0 }
+      }
+    ]
+  },
+  "overwrite": true
+}

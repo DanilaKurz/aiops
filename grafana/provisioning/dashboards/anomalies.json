@@ -1,0 +1,77 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "anomalies",
+    "title": "Anomalies",
+    "tags": ["aiops"],
+    "timezone": "browser",
+    "schemaVersion": 39,
+    "version": 1,
+    "panels": [
+      {
+        "id": 1,
+        "title": "Total Logs",
+        "type": "stat",
+        "datasource": {
+          "type": "yesoreyeram-infinity-datasource",
+          "uid": "aiops-service"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "type": "json",
+            "source": "url",
+            "url": "http://aiops-service:8081/stats",
+            "format": "table",
+            "columns": [
+              { "selector": "total_logs", "text": "Total Logs", "type": "number" }
+            ]
+          }
+        ],
+        "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 }
+      },
+      {
+        "id": 2,
+        "title": "Anomaly Count",
+        "type": "stat",
+        "datasource": {
+          "type": "yesoreyeram-infinity-datasource",
+          "uid": "aiops-service"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "type": "json",
+            "source": "url",
+            "url": "http://aiops-service:8081/stats",
+            "format": "table",
+            "columns": [
+              { "selector": "anomaly_count", "text": "Anomaly Count", "type": "number" }
+            ]
+          }
+        ],
+        "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 }
+      },
+      {
+        "id": 3,
+        "title": "Anomalies",
+        "type": "table",
+        "datasource": {
+          "type": "yesoreyeram-infinity-datasource",
+          "uid": "aiops-service"
+        },
+        "targets": [
+          {
+            "refId": "A",
+            "type": "json",
+            "source": "url",
+            "url": "http://aiops-service:8081/anomalies",
+            "format": "table"
+          }
+        ],
+        "gridPos": { "h": 14, "w": 24, "x": 0, "y": 4 }
+      }
+    ]
+  },
+  "overwrite": true
+}
