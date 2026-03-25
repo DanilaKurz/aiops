@@ -1,0 +1,7 @@
+{
+    "title": "Payment API CPU spike caused by unindexed query",
+    "root_cause": "Missing index on orders.customer_id after migration v2.4.1",
+    "symptoms": ["CPU > 95%", "Latency p99 > 5s", "503 errors"],
+    "resolution": "Added index, rolled back to v2.3.0",
+    "affected_services": ["payment-api", "db-master"]
+}
