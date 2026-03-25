@@ -1,8 +1,16 @@
 # AIOps MVP -- Design Specification
 
 **Date**: 2026-03-25
+**Version**: 1.1
 **Status**: Approved
 **Goal**: Exploratory prototype -- evaluate how Drain3 + Keep + OpenAI GPT-5.4 + Grafana work together for automated root cause analysis.
+
+### Changelog
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0 | 2026-03-25 | Initial spec |
+| 1.1 | 2026-03-25 | Added: startup sequence, database schema, error handling, Grafana plugin choice, model fallback, CORS, ingest timeout note |
 
 ---
 
@@ -36,7 +44,8 @@ Docker Compose (6 containers):
 **Key decisions:**
 - 1 service instead of 2 -- Drain, anomaly detection, alerter, AI agent in one FastAPI app
 - SQLite for clusters, anomalies, and reports (file in volume, no extra container)
-- Grafana with JSON API datasource -- connects to aiops-service and Keep API endpoints
+- Grafana with Infinity datasource plugin (`yesoreyeram-infinity-datasource`) -- connects to aiops-service and Keep API endpoints
+- CORS middleware enabled (`allow_origins=["*"]`) for local development
 - Keep -- standard deploy (api + ui + postgres), minimal configuration
 
 ---
@@ -108,6 +117,34 @@ services/aiops/
 **Volumes:** `keep-db-data`, `chroma-data`, `./data` (OpenRCA datasets), `./grafana/provisioning`
 
 **Single `.env` file:** `OPENAI_API_KEY` (only manual value), rest has defaults.
+
+### Startup and Initialization Sequence
+
+```
+1. docker-compose up -d
+2. Docker Compose dependency chain (depends_on + healthcheck):
+   keep-db (postgres ready) -> keep-api -> keep-ui
+   chromadb (healthcheck: /api/v1/heartbeat)
+   aiops-service (waits for: chromadb, keep-api)
+3. aiops-service startup (app/main.py lifespan):
+   a. Initialize SQLite schema (create tables if not exist)
+   b. Initialize Drain3 TemplateMiner
+   c. Connect to ChromaDB, create collection if not exists
+   d. Load runbooks + past_incidents from knowledge/ into ChromaDB (if not already loaded)
+4. scripts/setup_keep.py (run manually once):
+   a. Wait for Keep API healthcheck
+   b. Create API key -> save to .env as KEEP_API_KEY
+   c. Load topology from OpenRCA
+   d. Configure dedup + correlation rules
+5. Ready for /ingest/openrca calls
+```
+
+### Error Handling
+
+- **OpenAI API failures**: retry 3 times with exponential backoff (2s, 4s, 8s). On final failure, return partial report with `confidence: 0` and `error` field.
+- **Keep API unreachable**: alerter.py logs warning and queues alerts in SQLite (`pending_alerts` table). Retry on next ingest or via `POST /alerts/retry`.
+- **ChromaDB empty**: RAG search returns empty list. Agent proceeds without knowledge base context -- still functional, just without runbook enrichment.
+- **Ingest timeout**: batch ingest may take 30-60s for large datasets. FastAPI configured with no request timeout. Client should set timeout >= 120s.
 
 ---
 
@@ -234,16 +271,16 @@ Flat structure, strict by default, `additionalProperties: false`:
 }
 ```
 
-### 6 Tools
+### Agent Tools (6 tools)
 
-| Tool | Source | Returns |
-|------|--------|---------|
-| `query_metrics` | OpenRCA metric/ CSV | Time series with anomaly deviations, baseline, onset time |
-| `query_logs` | Drain clusters from SQLite | Top anomalous templates with % deviation from baseline |
-| `query_traces` | OpenRCA trace/ CSV | Critical path + bottleneck service |
-| `get_topology` | OpenRCA traces | Service dependency graph |
-| `get_recent_changes` | OpenRCA record.csv | Deploys with exact timestamps |
-| `search_knowledge_base` | ChromaDB | Top-3 runbooks + past incidents |
+| Tool | Implementation | Returns |
+|------|---------------|---------|
+| `query_metrics` | `adapters/openrca.load_metrics()` | Time series with anomaly deviations, baseline, onset time |
+| `query_logs` | SQLite query via `db.py` | Top anomalous templates with % deviation from baseline |
+| `query_traces` | `adapters/openrca.load_traces()` | Critical path + bottleneck service |
+| `get_topology` | `adapters/openrca.load_topology()` | Service dependency graph |
+| `get_recent_changes` | `adapters/openrca.load_ground_truth()` | Deploys with exact timestamps |
+| `search_knowledge_base` | `agent/rag.py` -> ChromaDB | Top-3 runbooks + past incidents |
 
 ### Deep Investigation Design
 
@@ -436,7 +473,7 @@ data/openrca/
 class Settings(BaseSettings):
     # OpenAI
     OPENAI_API_KEY: str
-    OPENAI_MODEL: str = "gpt-5.4"
+    OPENAI_MODEL: str = "gpt-5.4"     # fallback: "gpt-4.1" if gpt-5.4 unavailable
     AGENT_MAX_ITERATIONS: int = 20
 
     # Keep
@@ -446,7 +483,8 @@ class Settings(BaseSettings):
     # ChromaDB
     CHROMA_URL: str = "http://chromadb:8000"
     CHROMA_COLLECTION: str = "aiops_knowledge"
-    EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
+    # Use OpenAI embeddings to avoid PyTorch dependency in container
+    EMBEDDING_MODEL: str = "text-embedding-3-small"
 
     # Data
     OPENRCA_DATA_DIR: str = "/data/openrca"
@@ -469,7 +507,69 @@ Only `OPENAI_API_KEY` requires manual setup. Everything else has working default
 
 ---
 
-## 10. Benchmark and Validation
+## 10. Database Schema (SQLite)
+
+```sql
+-- Log entries parsed by Drain
+CREATE TABLE log_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL,
+    service TEXT NOT NULL,
+    raw_message TEXT NOT NULL,
+    cluster_id INTEGER NOT NULL,
+    params TEXT,  -- JSON array of extracted parameters
+    dataset TEXT NOT NULL,
+    date TEXT NOT NULL
+);
+
+-- Drain cluster templates
+CREATE TABLE clusters (
+    id INTEGER PRIMARY KEY,
+    template TEXT NOT NULL,
+    count INTEGER DEFAULT 0,
+    first_seen TEXT,
+    last_seen TEXT
+);
+
+-- Detected anomalies
+CREATE TABLE anomalies (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    window_start TEXT NOT NULL,
+    window_end TEXT NOT NULL,
+    score REAL NOT NULL,
+    anomaly_type TEXT NOT NULL,  -- 'isolation_forest' | 'new_template' | 'rare_spike'
+    service TEXT,
+    details TEXT,  -- JSON: contributing templates, deviations
+    alert_sent INTEGER DEFAULT 0
+);
+
+-- AI investigation reports
+CREATE TABLE reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    incident_id TEXT,
+    dataset TEXT,
+    date TEXT,
+    created_at TEXT NOT NULL,
+    root_cause TEXT NOT NULL,      -- JSON: {component, reason, onset_time, confidence}
+    causal_chain TEXT,             -- JSON array
+    evidence TEXT,                 -- JSON array
+    data_coverage TEXT,            -- JSON: {metrics_checked, logs_checked, traces_checked}
+    quality TEXT,                  -- JSON: {total_tool_calls, all_data_types_checked, ...}
+    correct INTEGER               -- NULL=unknown, 1=correct, 0=incorrect (benchmark)
+);
+
+-- Pending alerts (retry queue for Keep failures)
+CREATE TABLE pending_alerts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT NOT NULL,
+    payload TEXT NOT NULL,          -- JSON alert body
+    retry_count INTEGER DEFAULT 0
+);
+```
+
+---
+
+## 11. Benchmark and Validation
 
 ```
 POST /benchmark/run {dataset: "Bank", dates: ["2024_01_15", ...]}
@@ -488,9 +588,11 @@ For each incident:
 
 **Result endpoint**: `GET /benchmark/results` -- feeds Grafana Benchmark dashboard.
 
+**Benchmark workflow**: `POST /benchmark/run` handles the full loop automatically -- ingest, Drain, anomaly detection, Keep alerting, AI investigation, and comparison with ground truth. No manual steps required.
+
 ---
 
-## Technology Stack Summary
+## 12. Technology Stack Summary
 
 | Layer | Technology |
 |-------|-----------|
@@ -498,10 +600,10 @@ For each incident:
 | Log parsing | Drain3 (TemplateMiner) |
 | Anomaly detection | scikit-learn (IsolationForest) |
 | LLM | OpenAI GPT-5.4 (Responses API) |
-| Embeddings | sentence-transformers (all-MiniLM-L6-v2) |
+| Embeddings | OpenAI text-embedding-3-small |
 | Vector store | ChromaDB |
 | Alert management | Keep (keephq) |
-| Dashboards | Grafana + JSON API plugin |
+| Dashboards | Grafana + Infinity datasource plugin |
 | Database | SQLite (aiops-service), PostgreSQL (Keep) |
 | Data processing | pandas |
 | Config | pydantic-settings |
