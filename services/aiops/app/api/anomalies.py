@@ -6,10 +6,10 @@ router = APIRouter()
 
 
 @router.get("")
-async def get_anomalies():
-    """List all detected anomalies."""
+async def get_anomalies(limit: int = 100):
+    """List detected anomalies (default limit 100)."""
     with get_connection() as conn:
-        rows = conn.execute("SELECT * FROM anomalies ORDER BY score DESC").fetchall()
+        rows = conn.execute("SELECT * FROM anomalies ORDER BY score DESC LIMIT ?", (limit,)).fetchall()
         result = []
         for row in rows:
             d = dict(row)

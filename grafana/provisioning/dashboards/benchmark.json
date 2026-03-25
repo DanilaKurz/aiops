@@ -1,55 +1,43 @@
 {
-  "dashboard": {
-    "id": null,
-    "uid": "benchmark",
-    "title": "Benchmark",
-    "tags": ["aiops"],
-    "timezone": "browser",
-    "schemaVersion": 39,
-    "version": 1,
-    "panels": [
-      {
-        "id": 1,
-        "title": "Accuracy",
-        "type": "stat",
-        "datasource": {
-          "type": "yesoreyeram-infinity-datasource",
-          "uid": "aiops-service"
-        },
-        "targets": [
-          {
-            "refId": "A",
-            "type": "json",
-            "source": "url",
-            "url": "http://aiops-service:8081/benchmark/results",
-            "format": "table",
-            "columns": [
-              { "selector": "accuracy", "text": "Accuracy", "type": "number" }
-            ]
-          }
-        ],
-        "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 }
+  "id": null,
+  "uid": "benchmark",
+  "title": "Benchmark",
+  "tags": [
+    "aiops"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "panels": [
+    {
+      "id": 1,
+      "title": "Benchmark Results",
+      "type": "table",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "aiops-service"
       },
-      {
-        "id": 2,
-        "title": "Benchmark Results",
-        "type": "table",
-        "datasource": {
-          "type": "yesoreyeram-infinity-datasource",
-          "uid": "aiops-service"
-        },
-        "targets": [
-          {
-            "refId": "A",
-            "type": "json",
-            "source": "url",
-            "url": "http://aiops-service:8081/benchmark/results",
-            "format": "table"
-          }
-        ],
-        "gridPos": { "h": 14, "w": 24, "x": 0, "y": 4 }
+      "targets": [
+        {
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "url": "http://aiops-service:8081/benchmark/results",
+          "url_options": {
+            "method": "GET",
+            "data": ""
+          },
+          "root_selector": "",
+          "parser": "backend"
+        }
+      ],
+      "gridPos": {
+        "h": 20,
+        "w": 24,
+        "x": 0,
+        "y": 0
       }
-    ]
-  },
-  "overwrite": true
+    }
+  ]
 }

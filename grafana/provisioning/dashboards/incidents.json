@@ -1,33 +1,49 @@
 {
-  "dashboard": {
-    "id": null,
-    "uid": "incidents",
-    "title": "Incidents",
-    "tags": ["aiops"],
-    "timezone": "browser",
-    "schemaVersion": 39,
-    "version": 1,
-    "panels": [
-      {
-        "id": 1,
-        "title": "Incidents",
-        "type": "table",
-        "datasource": {
-          "type": "yesoreyeram-infinity-datasource",
-          "uid": "keep-api"
-        },
-        "targets": [
-          {
-            "refId": "A",
-            "type": "json",
-            "source": "url",
-            "url": "http://keep-api:8080/incidents",
-            "format": "table"
-          }
-        ],
-        "gridPos": { "h": 16, "w": 24, "x": 0, "y": 0 }
+  "id": null,
+  "uid": "incidents",
+  "title": "Incidents",
+  "tags": [
+    "aiops"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "panels": [
+    {
+      "id": 1,
+      "title": "Keep Alerts",
+      "type": "table",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "keep-api"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "url": "http://keep-api:8080/alerts",
+          "url_options": {
+            "method": "GET",
+            "data": "",
+            "headers": [
+              {
+                "key": "Authorization",
+                "value": "Basic YWRtaW46YWRtaW4="
+              }
+            ]
+          },
+          "root_selector": "",
+          "parser": "backend"
+        }
+      ],
+      "gridPos": {
+        "h": 20,
+        "w": 24,
+        "x": 0,
+        "y": 0
       }
-    ]
-  },
-  "overwrite": true
+    }
+  ]
 }

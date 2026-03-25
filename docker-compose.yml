@@ -8,14 +8,14 @@ services:
       - KEEP_API_URL=http://keep-api:8080
       - KEEP_API_KEY=${KEEP_API_KEY}
       - CHROMA_URL=http://chromadb:8000
-      - OPENRCA_DATA_DIR=/data/openrca
+      - OPENRCA_DATA_DIR=/data
       - SQLITE_PATH=/data/aiops.db
     volumes:
-      - ./data:/data
+      - .:/data
       - ./services/aiops/knowledge:/app/knowledge
     depends_on:
       chromadb:
-        condition: service_healthy
+        condition: service_started
       keep-api:
         condition: service_started
 
@@ -60,11 +60,7 @@ services:
       - "8000:8000"
     volumes:
       - chroma-data:/chroma/chroma
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+    # No healthcheck - chromadb image lacks curl/wget
 
   grafana:
     image: grafana/grafana-oss:latest
