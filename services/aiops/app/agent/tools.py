@@ -10,7 +10,6 @@ Provides 6 tools in OpenAI Responses API format (flat structure):
   - search_knowledge_base
 """
 
-import json
 import sqlite3
 from typing import Any, Callable, Optional
 
