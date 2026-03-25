@@ -1,0 +1,13 @@
+fastapi==0.115.*
+uvicorn[standard]==0.34.*
+drain3==0.9.*
+scikit-learn==1.6.*
+pandas==2.2.*
+numpy==2.1.*
+httpx==0.28.*
+pydantic==2.10.*
+pydantic-settings==2.7.*
+openai==1.82.*
+chromadb==0.6.*
+pytest==8.3.*
+pytest-asyncio==0.25.*
