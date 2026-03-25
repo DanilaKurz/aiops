@@ -142,7 +142,7 @@ services/aiops/
 ### Error Handling
 
 - **OpenAI API failures**: retry 3 times with exponential backoff (2s, 4s, 8s). On final failure, return partial report with `confidence: 0` and `error` field.
-- **Keep API unreachable**: alerter.py logs warning and queues alerts in SQLite (`pending_alerts` table). Retry on next ingest or via `POST /alerts/retry`.
+- **Keep API unreachable**: alerter.py logs warning and queues alerts in SQLite (`pending_alerts` table). Retry automatically on next ingest call.
 - **ChromaDB empty**: RAG search returns empty list. Agent proceeds without knowledge base context -- still functional, just without runbook enrichment.
 - **Ingest timeout**: batch ingest may take 30-60s for large datasets. FastAPI configured with no request timeout. Client should set timeout >= 120s.
 
@@ -222,7 +222,7 @@ def investigate(incident_context: str, tools: list, tool_registry: dict):
     max_iterations = 20
     for i in range(max_iterations):
         response = client.responses.create(
-            model="gpt-5.4",
+            model=settings.OPENAI_MODEL,
             instructions=SYSTEM_PROMPT,
             tools=tools,
             input=input_list,
@@ -358,8 +358,8 @@ Phase 3 -- VERIFICATION:
 
 ### Datasources (auto-provisioned)
 
-1. **aiops-service** (JSON API plugin) -> `http://aiops-service:8081`
-2. **keep-api** (JSON API plugin) -> `http://keep-api:8080`
+1. **aiops-service** (Infinity plugin) -> `http://aiops-service:8081`
+2. **keep-api** (Infinity plugin) -> `http://keep-api:8080`
 
 ### 5 Dashboards
 
@@ -388,6 +388,66 @@ grafana/
 ```
 
 Mounted via Docker Compose volumes -- dashboards ready immediately after `docker-compose up`.
+
+### Key API Response Schemas (for Grafana)
+
+**GET /stats**
+```json
+{
+  "total_logs": 12450,
+  "unique_templates": 87,
+  "anomaly_count": 5,
+  "anomaly_rate": 0.04,
+  "last_ingest": "2024-01-15T10:30:00Z"
+}
+```
+
+**GET /clusters/timeline?window=300**
+```json
+[
+  {
+    "window_start": "2024-01-15T10:00:00Z",
+    "window_end": "2024-01-15T10:05:00Z",
+    "clusters": [
+      {"cluster_id": 1, "template": "Connection timeout to <*>", "count": 47},
+      {"cluster_id": 2, "template": "Request processed in <*>ms", "count": 312}
+    ]
+  }
+]
+```
+
+**GET /anomalies**
+```json
+[
+  {
+    "id": 1,
+    "window_start": "2024-01-15T10:10:00Z",
+    "window_end": "2024-01-15T10:15:00Z",
+    "score": 0.92,
+    "anomaly_type": "isolation_forest",
+    "service": "payment-api",
+    "details": {
+      "top_templates": [
+        {"template": "Connection timeout to <*>", "count": 47, "baseline": 2, "deviation": "23.5x"}
+      ]
+    }
+  }
+]
+```
+
+**POST /investigate -> GET /reports/{id}**
+```json
+{
+  "id": 1,
+  "incident_id": "inc-123",
+  "created_at": "2024-01-15T10:45:00Z",
+  "root_cause": {"component": "db-master", "reason": "...", "onset_time": "...", "confidence": 0.85},
+  "causal_chain": ["..."],
+  "evidence": ["..."],
+  "data_coverage": {"metrics_checked": [], "logs_checked": [], "traces_checked": []},
+  "quality": {"total_tool_calls": 14, "all_data_types_checked": true, "upstream_followed": true}
+}
+```
 
 ---
 
