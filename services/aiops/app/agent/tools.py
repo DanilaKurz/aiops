@@ -10,7 +10,6 @@ Provides 6 tools in OpenAI Responses API format (flat structure):
   - search_knowledge_base
 """
 
-import sqlite3
 from typing import Any, Callable, Optional
 
 
@@ -18,62 +17,58 @@ TOOL_DEFINITIONS: list[dict] = [
     {
         "type": "function",
         "name": "query_metrics",
-        "description": "Query KPI metrics with anomaly analysis for a service in a time range",
+        "description": "Query KPI metrics with anomaly analysis. Returns anomalous and normal metrics with deviations from baseline.",
         "parameters": {
             "type": "object",
             "properties": {
-                "service": {"type": "string", "description": "Service name"},
-                "metric_type": {
-                    "type": "string",
-                    "enum": ["cpu", "memory", "network", "disk", "latency", "error_rate", "all"],
-                    "description": "Type of metric to query",
-                },
-                "from_time": {"type": "string", "description": "ISO timestamp start"},
-                "to_time": {"type": "string", "description": "ISO timestamp end"},
+                "dataset": {"type": "string", "description": "Dataset name (e.g. Bank)"},
+                "date": {"type": "string", "description": "Date folder (e.g. 2021_03_04)"},
+                "service": {"type": ["string", "null"], "description": "Service/component name to filter (null for all)"},
+                "hour": {"type": ["integer", "null"], "description": "Hour 0-23 to filter (null for full day)"},
             },
-            "required": ["service", "metric_type", "from_time", "to_time"],
+            "required": ["dataset", "date", "service", "hour"],
             "additionalProperties": False,
         },
     },
     {
         "type": "function",
         "name": "query_logs",
-        "description": "Query structured log clusters for a service in a time range, with baseline deviation analysis",
+        "description": "Query log patterns for a service. Returns Drain-extracted templates with frequency counts.",
         "parameters": {
             "type": "object",
             "properties": {
-                "service": {"type": "string", "description": "Service name"},
-                "from_time": {"type": "string", "description": "ISO timestamp start"},
-                "to_time": {"type": "string", "description": "ISO timestamp end"},
+                "dataset": {"type": "string", "description": "Dataset name"},
+                "date": {"type": "string", "description": "Date folder"},
+                "service": {"type": ["string", "null"], "description": "Service name to filter"},
+                "hour": {"type": ["integer", "null"], "description": "Hour 0-23 to filter"},
             },
-            "required": ["service", "from_time", "to_time"],
+            "required": ["dataset", "date", "service", "hour"],
             "additionalProperties": False,
         },
     },
     {
         "type": "function",
         "name": "query_traces",
-        "description": "Query distributed traces with critical-path analysis for a time range",
+        "description": "Get distributed trace analysis showing request flow, critical path, and bottleneck service",
         "parameters": {
             "type": "object",
             "properties": {
-                "dataset": {"type": "string", "description": "Dataset name (e.g. Bank)"},
-                "date": {"type": "string", "description": "Date folder (e.g. 2024_01_15)"},
-                "from_time": {"type": "string", "description": "ISO timestamp start"},
-                "to_time": {"type": "string", "description": "ISO timestamp end"},
+                "dataset": {"type": "string", "description": "Dataset name"},
+                "date": {"type": "string", "description": "Date folder"},
+                "hour": {"type": ["integer", "null"], "description": "Hour 0-23 to filter"},
             },
-            "required": ["dataset", "date", "from_time", "to_time"],
+            "required": ["dataset", "date", "hour"],
             "additionalProperties": False,
         },
     },
     {
         "type": "function",
         "name": "get_topology",
-        "description": "Retrieve the service dependency graph (nodes and edges) for a dataset",
+        "description": "Get service dependency graph showing which components communicate",
         "parameters": {
             "type": "object",
             "properties": {
-                "dataset": {"type": "string", "description": "Dataset name (e.g. Bank)"},
+                "dataset": {"type": "string", "description": "Dataset name"},
             },
             "required": ["dataset"],
             "additionalProperties": False,
@@ -82,12 +77,12 @@ TOOL_DEFINITIONS: list[dict] = [
     {
         "type": "function",
         "name": "get_recent_changes",
-        "description": "List recent deployments, config changes, and rollbacks from ground truth records",
+        "description": "Get known incidents and changes for a date. Returns ground truth failure records.",
         "parameters": {
             "type": "object",
             "properties": {
-                "dataset": {"type": "string", "description": "Dataset name (e.g. Bank)"},
-                "date": {"type": "string", "description": "Date folder (e.g. 2024_01_15)"},
+                "dataset": {"type": "string", "description": "Dataset name"},
+                "date": {"type": "string", "description": "Date folder"},
             },
             "required": ["dataset", "date"],
             "additionalProperties": False,
@@ -117,100 +112,42 @@ def _error(msg: str) -> dict:
 def _make_query_metrics(openrca_adapter: Any) -> Callable:
     """Create the query_metrics callable."""
 
-    def query_metrics(*, service: str, metric_type: str, from_time: str, to_time: str) -> dict:
+    def query_metrics(*, dataset: str, date: str, service: str = None, hour: int = None) -> dict:
         if openrca_adapter is None:
             return _error("openrca_adapter is not configured")
-        metric = None if metric_type == "all" else metric_type
-        time_range = {"start": from_time, "end": to_time}
-        # The adapter needs dataset/date which are derived from the incident
-        # context; however, because the adapter is pre-bound to its data_dir
-        # we use a convention: iterate available datasets or the caller
-        # pre-configures the adapter.  For now we pass generic values and
-        # let the adapter resolve from its cache.
         try:
-            result = openrca_adapter.load_metrics(
-                dataset=getattr(openrca_adapter, "_current_dataset", ""),
-                date=getattr(openrca_adapter, "_current_date", ""),
-                service=service,
-                metric=metric,
-                time_range=time_range,
+            return openrca_adapter.load_metrics(
+                dataset=dataset, date=date, service=service, hour=hour
             )
-            return result
         except Exception as exc:
             return _error(f"query_metrics failed: {exc}")
 
     return query_metrics
 
 
-def _make_query_logs(db_path: Optional[str]) -> Callable:
-    """Create the query_logs callable that queries the SQLite clusters table."""
+def _make_query_logs(openrca_adapter: Any) -> Callable:
+    """Query logs through the adapter, group by content patterns."""
 
-    def query_logs(*, service: str, from_time: str, to_time: str) -> dict:
-        if db_path is None:
-            return _error("db_path is not configured")
+    def query_logs(*, dataset: str, date: str, service: str = None, hour: int = None) -> dict:
+        if openrca_adapter is None:
+            return _error("openrca_adapter is not configured")
         try:
-            conn = sqlite3.connect(db_path)
-            conn.row_factory = sqlite3.Row
-
-            # Fetch log entries for the service in the time window
-            rows = conn.execute(
-                """
-                SELECT le.timestamp, le.raw_message, le.cluster_id, c.template, c.count
-                FROM log_entries le
-                JOIN clusters c ON le.cluster_id = c.id
-                WHERE le.service = ?
-                  AND le.timestamp >= ?
-                  AND le.timestamp <= ?
-                ORDER BY le.timestamp
-                """,
-                (service, from_time, to_time),
-            ).fetchall()
-
-            # Compute baseline: average count per cluster across all data
-            baseline_rows = conn.execute(
-                "SELECT id, count FROM clusters"
-            ).fetchall()
-            conn.close()
-
-            baseline_map: dict[int, int] = {}
-            total_count = 0
-            for br in baseline_rows:
-                baseline_map[br["id"]] = br["count"]
-                total_count += br["count"]
-            avg_count = total_count / len(baseline_map) if baseline_map else 1
-
-            # Build per-cluster summary in the window
-            cluster_summary: dict[int, dict] = {}
-            for row in rows:
-                cid = row["cluster_id"]
-                if cid not in cluster_summary:
-                    cluster_summary[cid] = {
-                        "cluster_id": cid,
-                        "template": row["template"],
-                        "window_count": 0,
-                        "baseline_count": baseline_map.get(cid, 0),
-                        "sample_messages": [],
-                    }
-                cluster_summary[cid]["window_count"] += 1
-                if len(cluster_summary[cid]["sample_messages"]) < 3:
-                    cluster_summary[cid]["sample_messages"].append(row["raw_message"])
-
-            # Compute deviation from baseline
-            clusters_out = []
-            for cs in cluster_summary.values():
-                deviation = cs["window_count"] / avg_count if avg_count else 0.0
-                cs["deviation_from_baseline"] = round(deviation, 4)
-                clusters_out.append(cs)
-
-            # Sort by deviation descending so the most anomalous clusters appear first
-            clusters_out.sort(key=lambda x: x["deviation_from_baseline"], reverse=True)
+            logs = openrca_adapter.load_logs(dataset=dataset, date=date, service=service, hour=hour)
+            # Group by service and count
+            service_counts: dict[str, dict] = {}
+            total = len(logs)
+            for log in logs:
+                svc = log.service
+                if svc not in service_counts:
+                    service_counts[svc] = {"count": 0, "samples": []}
+                service_counts[svc]["count"] += 1
+                if len(service_counts[svc]["samples"]) < 3:
+                    service_counts[svc]["samples"].append(log.message[:150])
 
             return {
-                "service": service,
-                "from_time": from_time,
-                "to_time": to_time,
-                "total_entries": len(rows),
-                "clusters": clusters_out,
+                "total_logs": total,
+                "services": service_counts,
+                "note": "Logs are GC (garbage collection) entries. Look for Full GC, Allocation Failure, OOM patterns."
             }
         except Exception as exc:
             return _error(f"query_logs failed: {exc}")
@@ -221,17 +158,11 @@ def _make_query_logs(db_path: Optional[str]) -> Callable:
 def _make_query_traces(openrca_adapter: Any) -> Callable:
     """Create the query_traces callable."""
 
-    def query_traces(*, dataset: str, date: str, from_time: str, to_time: str) -> dict:
+    def query_traces(*, dataset: str, date: str, hour: int = None) -> dict:
         if openrca_adapter is None:
             return _error("openrca_adapter is not configured")
         try:
-            time_range = {"start": from_time, "end": to_time}
-            result = openrca_adapter.load_traces(
-                dataset=dataset,
-                date=date,
-                time_range=time_range,
-            )
-            return result
+            return openrca_adapter.load_traces(dataset=dataset, date=date, hour=hour)
         except Exception as exc:
             return _error(f"query_traces failed: {exc}")
 
@@ -296,7 +227,7 @@ def get_tool_registry(
     """
     return {
         "query_metrics": _make_query_metrics(openrca_adapter),
-        "query_logs": _make_query_logs(db_path),
+        "query_logs": _make_query_logs(openrca_adapter),
         "query_traces": _make_query_traces(openrca_adapter),
         "get_topology": _make_get_topology(openrca_adapter),
         "get_recent_changes": _make_get_recent_changes(openrca_adapter),
