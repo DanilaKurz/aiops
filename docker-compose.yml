@@ -1,0 +1,81 @@
+services:
+  aiops-service:
+    build: ./services/aiops
+    ports:
+      - "8081:8081"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - KEEP_API_URL=http://keep-api:8080
+      - KEEP_API_KEY=${KEEP_API_KEY}
+      - CHROMA_URL=http://chromadb:8000
+      - OPENRCA_DATA_DIR=/data/openrca
+      - SQLITE_PATH=/data/aiops.db
+    volumes:
+      - ./data:/data
+      - ./services/aiops/knowledge:/app/knowledge
+    depends_on:
+      chromadb:
+        condition: service_healthy
+      keep-api:
+        condition: service_started
+
+  keep-api:
+    image: us-central1-docker.pkg.dev/keephq/keep/keep-api:latest
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_URL=postgresql://keep:keep@keep-db:5432/keep
+      - SECRET_KEY=dev-secret-key-change-in-prod
+      - KEEP_TOPOLOGY_PROCESSOR=true
+      - KEEP_TOPOLOGY_PROCESSOR_INTERVAL=10
+    depends_on:
+      keep-db:
+        condition: service_healthy
+
+  keep-ui:
+    image: us-central1-docker.pkg.dev/keephq/keep/keep-ui:latest
+    ports:
+      - "3001:3000"
+    environment:
+      - API_URL=http://keep-api:8080
+      - NEXTAUTH_SECRET=dev-secret
+
+  keep-db:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=keep
+      - POSTGRES_PASSWORD=keep
+      - POSTGRES_DB=keep
+    volumes:
+      - keep-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keep"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  chromadb:
+    image: chromadb/chroma:latest
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma-data:/chroma/chroma
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  grafana:
+    image: grafana/grafana-oss:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=yesoreyeram-infinity-datasource
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+
+volumes:
+  keep-db-data:
+  chroma-data:
