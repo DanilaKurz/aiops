@@ -71,11 +71,11 @@ def test_ingest_and_clusters(test_app):
     # 1. Ingest
     response = test_app.post("/ingest/openrca", json={
         "dataset": "Bank",
-        "date": "2024_01_15"
+        "date": "2021_03_04"
     })
     assert response.status_code == 200
     data = response.json()
-    assert data["logs_processed"] == 3
+    assert data["logs_processed"] == 4
     assert data["clusters"] > 0
 
     # 2. Check clusters
@@ -88,7 +88,7 @@ def test_ingest_and_clusters(test_app):
     response = test_app.get("/stats")
     assert response.status_code == 200
     stats = response.json()
-    assert stats["total_logs"] == 3
+    assert stats["total_logs"] == 4
     assert stats["unique_templates"] > 0
 
 
@@ -97,7 +97,7 @@ def test_anomalies_endpoint(test_app):
     # First ingest some data
     test_app.post("/ingest/openrca", json={
         "dataset": "Bank",
-        "date": "2024_01_15"
+        "date": "2021_03_04"
     })
 
     response = test_app.get("/anomalies")
