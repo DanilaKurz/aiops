@@ -15,6 +15,7 @@
 |---|------|--------|-------|------------|
 | 1 | Project scaffolding (config, models, db, requirements) | TODO | - | - |
 | 2 | Docker Compose + Dockerfile | TODO | - | - |
+| 12 | System prompt | TODO | - | - |
 
 ## Batch 2 -- Core Modules (depends on Task 1, parallel)
 
@@ -44,14 +45,13 @@
 |---|------|--------|-------|------------|
 | 10 | API routes -- pipeline (ingest, clusters, anomalies, stats) | TODO | - | Task 4, 6, 8 |
 | 11 | API routes -- agent (investigate, reports, benchmark) | TODO | - | Task 9 |
-| 12 | System prompt | TODO | - | - |
 
 ## Batch 6 -- Assembly (parallel)
 
 | # | Task | Status | Agent | Depends On |
 |---|------|--------|-------|------------|
 | 13 | FastAPI main.py (lifespan, routers) | TODO | - | Task 10, 11 |
-| 14 | Keep setup script | TODO | - | Task 2 |
+| 14 | Keep setup script (full: API key + topology + rules) | TODO | - | Task 2, 3 |
 | 15 | Grafana provisioning (5 dashboards) | TODO | - | Task 10, 11 |
 
 ## Batch 7 -- Verification
