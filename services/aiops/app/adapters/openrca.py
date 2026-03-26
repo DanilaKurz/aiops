@@ -112,11 +112,19 @@ class OpenRCAAdapter:
                 temp_df = pd.read_csv(fpath)
 
                 # Normalize to long format: timestamp, cmdb_id, kpi_name, value
-                if "kpi_name" in temp_df.columns and "cmdb_id" in temp_df.columns:
-                    # Already long format (metric_container, metric_node, etc.)
+                cols = set(temp_df.columns)
+
+                if "kpi_name" in cols and "cmdb_id" in cols:
+                    # Bank/Market long format (metric_container, metric_node, etc.)
                     norm = temp_df[["timestamp", "cmdb_id", "kpi_name", "value"]].copy()
-                elif "tc" in temp_df.columns:
-                    # Wide format (metric_app): melt rr, sr, cnt, mrt
+
+                elif "name" in cols and "cmdb_id" in cols and "itemid" in cols:
+                    # Telecom format: itemid, name, bomc_id, timestamp, value, cmdb_id
+                    norm = temp_df[["timestamp", "cmdb_id", "name", "value"]].copy()
+                    norm = norm.rename(columns={"name": "kpi_name"})
+
+                elif "tc" in cols:
+                    # Bank wide format (metric_app): melt rr, sr, cnt, mrt
                     value_cols = [c for c in temp_df.columns if c not in ("timestamp", "tc")]
                     norm = temp_df.melt(
                         id_vars=["timestamp", "tc"],
@@ -124,6 +132,27 @@ class OpenRCAAdapter:
                         var_name="kpi_name", value_name="value"
                     )
                     norm.rename(columns={"tc": "cmdb_id"}, inplace=True)
+
+                elif "serviceName" in cols and "startTime" in cols:
+                    # Telecom metric_app: serviceName, startTime, avg_time, num, succee_num, succee_rate
+                    value_cols = [c for c in temp_df.columns if c not in ("serviceName", "startTime")]
+                    norm = temp_df.melt(
+                        id_vars=["startTime", "serviceName"],
+                        value_vars=value_cols,
+                        var_name="kpi_name", value_name="value"
+                    )
+                    norm = norm.rename(columns={"startTime": "timestamp", "serviceName": "cmdb_id"})
+
+                elif "service" in cols and "mrt" in cols:
+                    # Market metric_service: service, timestamp, rr, sr, mrt, count
+                    value_cols = [c for c in temp_df.columns if c not in ("service", "timestamp")]
+                    norm = temp_df.melt(
+                        id_vars=["timestamp", "service"],
+                        value_vars=value_cols,
+                        var_name="kpi_name", value_name="value"
+                    )
+                    norm = norm.rename(columns={"service": "cmdb_id"})
+
                 else:
                     continue  # unknown format, skip
 
@@ -133,6 +162,10 @@ class OpenRCAAdapter:
                 return {"service": service, "anomalies": [], "normal_metrics": [], "earliest_anomaly": None}
 
             df = pd.concat(all_dfs, ignore_index=True)
+
+            # Normalize timestamps: if milliseconds (>1e12), convert to seconds
+            if not df.empty and df["timestamp"].iloc[0] > 1e12:
+                df["timestamp"] = df["timestamp"] // 1000
 
             # Apply filters
             if service is not None:
@@ -187,20 +220,69 @@ class OpenRCAAdapter:
             "earliest_anomaly": earliest_anomaly,
         }
 
+    @staticmethod
+    def _normalize_trace_columns(df: pd.DataFrame) -> pd.DataFrame:
+        """Normalize trace column names across datasets to internal format:
+        timestamp, service, parent_span_id, span_id, trace_id, duration_ms
+
+        Bank:    timestamp, cmdb_id, parent_id,   span_id, trace_id, duration
+        Market:  timestamp, cmdb_id, parent_span,  span_id, trace_id, duration
+        Telecom: startTime, cmdb_id, pid,          id,      traceId,  elapsedTime
+        """
+        col_map = {}
+        cols = set(df.columns)
+
+        # timestamp
+        if "startTime" in cols:
+            col_map["startTime"] = "timestamp"
+
+        # service
+        # cmdb_id is the same in all formats, rename later
+
+        # parent span id
+        if "parent_span" in cols:
+            col_map["parent_span"] = "parent_span_id"
+        elif "pid" in cols:
+            col_map["pid"] = "parent_span_id"
+        elif "parent_id" in cols:
+            col_map["parent_id"] = "parent_span_id"
+
+        # span id
+        if "id" in cols and "span_id" not in cols:
+            col_map["id"] = "span_id"
+
+        # trace id
+        if "traceId" in cols:
+            col_map["traceId"] = "trace_id"
+
+        # duration
+        if "elapsedTime" in cols:
+            col_map["elapsedTime"] = "duration_ms"
+        elif "duration" in cols:
+            col_map["duration"] = "duration_ms"
+
+        # service
+        if "cmdb_id" in cols:
+            col_map["cmdb_id"] = "service"
+
+        df = df.rename(columns=col_map)
+        return df
+
     def load_traces(self, dataset: str, date: str,
                     time_range: Optional[dict] = None,
                     hour: Optional[int] = None) -> dict:
-        """Read trace/trace_span.csv, build critical path."""
+        """Read trace/trace_span.csv, build critical path. Auto-detects column format."""
         trace_path = os.path.join(self._base_path(dataset, date), "trace", "trace_span.csv")
         if not os.path.isfile(trace_path):
             return {"critical_path": [], "bottleneck": None, "anomalous_spans_count": 0, "total_spans_analyzed": 0}
 
         def make_filter(hr):
             def fn(chunk):
-                if hr is not None:
-                    ts_start = self._date_to_timestamp(date, hr) * 1000  # traces use ms
+                chunk = self._normalize_trace_columns(chunk)
+                if hr is not None and "timestamp" in chunk.columns:
+                    ts_start = self._date_to_timestamp(date, hr) * 1000
                     ts_end = ts_start + 3600_000
-                    return chunk[(chunk["timestamp"] >= ts_start) & (chunk["timestamp"] < ts_end)]
+                    chunk = chunk[(chunk["timestamp"] >= ts_start) & (chunk["timestamp"] < ts_end)]
                 return chunk
             return fn
 
@@ -213,14 +295,9 @@ class OpenRCAAdapter:
         if df.empty:
             return {"critical_path": [], "bottleneck": None, "anomalous_spans_count": 0, "total_spans_analyzed": 0}
 
+        # Ensure columns are normalized (filter already did it per chunk, but be safe)
+        df = self._normalize_trace_columns(df)
         total_spans = len(df)
-
-        # Rename columns to internal format
-        df = df.rename(columns={
-            "cmdb_id": "service",
-            "parent_id": "parent_span_id",
-            "duration": "duration_ms",
-        })
 
         # Find root spans (empty parent)
         root_spans = df[df["parent_span_id"].isna() | (df["parent_span_id"] == "")]
@@ -283,7 +360,7 @@ class OpenRCAAdapter:
         }
 
     def load_topology(self, dataset: str) -> dict:
-        """Build service dependency graph from traces."""
+        """Build service dependency graph from traces. Auto-detects column format."""
         nodes = set()
         edges = set()
 
@@ -296,23 +373,24 @@ class OpenRCAAdapter:
             if not os.path.isfile(trace_path):
                 continue
 
-            # Read only needed columns, sample first 100k rows for topology
             try:
-                df = pd.read_csv(trace_path, usecols=["cmdb_id", "parent_id", "span_id"], nrows=100_000)
+                df = pd.read_csv(trace_path, nrows=100_000)
+                df = self._normalize_trace_columns(df)
             except Exception:
                 continue
 
+            # After normalization, columns are: service, parent_span_id, span_id
             span_service = {}
             for _, row in df.iterrows():
-                svc = str(row["cmdb_id"])
+                svc = str(row["service"])
                 nodes.add(svc)
                 span_service[str(row["span_id"])] = svc
 
             for _, row in df.iterrows():
-                pid = row.get("parent_id")
+                pid = row.get("parent_span_id")
                 if pd.notna(pid) and str(pid) != "":
                     parent_svc = span_service.get(str(pid))
-                    child_svc = str(row["cmdb_id"])
+                    child_svc = str(row["service"])
                     if parent_svc and parent_svc != child_svc:
                         edges.add((parent_svc, child_svc))
 
