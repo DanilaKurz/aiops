@@ -1,13 +1,15 @@
 """
 Agent tool definitions and registry for the AI RCA investigator.
 
-Provides 6 tools in OpenAI Responses API format (flat structure):
+Provides 8 tools in OpenAI Responses API format (flat structure):
   - query_metrics
   - query_logs
   - query_traces
   - get_topology
   - get_recent_changes
   - search_knowledge_base
+  - query_parser_details
+  - get_baseline_comparison
 """
 
 from typing import Any, Callable, Optional
@@ -33,7 +35,7 @@ TOOL_DEFINITIONS: list[dict] = [
     {
         "type": "function",
         "name": "query_logs",
-        "description": "Query log patterns for a service. Returns Drain-extracted templates with frequency counts.",
+        "description": "Query log patterns for a service. Returns template clusters with frequency counts, anomaly scores, and parser agreement from the ensemble. Each template includes a confidence score and the percentage of parsers that agreed on this pattern.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -98,6 +100,35 @@ TOOL_DEFINITIONS: list[dict] = [
                 "query": {"type": "string", "description": "Natural-language search query"},
             },
             "required": ["query"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "type": "function",
+        "name": "query_parser_details",
+        "description": "Get detailed log parsing results per parser for a service. Shows which templates each parser found, their agreement ratio, and confidence scores. Use this to assess how reliable the log analysis is for a given component.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "service": {"type": "string", "description": "Service/component name (e.g. Redis02, Tomcat01)"},
+                "hour": {"type": ["integer", "null"], "description": "Hour 0-23 to filter (null for full day)"},
+            },
+            "required": ["service"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "type": "function",
+        "name": "get_baseline_comparison",
+        "description": "Compare current metric value against historical baseline. Returns values for previous N hours, trend direction (stable/rising/spike/falling), and percentile rank. Use this instead of relying on hardcoded thresholds -- it shows how unusual the current value really is.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "service": {"type": "string", "description": "Service/component name (e.g. Redis02)"},
+                "metric": {"type": "string", "description": "Metric/KPI name (e.g. CPUCpuUtil, MEMUsedMemPerc)"},
+                "hours_back": {"type": "integer", "description": "Hours of history to compare (default 6)", "default": 6},
+            },
+            "required": ["service", "metric"],
             "additionalProperties": False,
         },
     },
