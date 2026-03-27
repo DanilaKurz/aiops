@@ -124,3 +124,71 @@ class TestPipelineRunner:
         # May be 0 if Bank data not available in test env
         assert isinstance(trace.raw_log_count, int)
         assert "parsing" in trace.timing or trace.raw_log_count == 0
+
+
+class TestIntegration:
+    """End-to-end integration test on Bank Hour 7."""
+
+    def setup_method(self):
+        PARSER_REGISTRY.clear()
+        register_parser("drain3", Drain3Parser)
+
+    def test_full_pipeline_drain3_only(self, tmp_path):
+        """Full pipeline run on Bank Hour 7 with Drain3."""
+        runner = PipelineRunner(config_path="pipeline_config.yaml")
+        # Override: only drain3 for fast, free test
+        runner.config.parsing.parsers = [
+            ParserConfig(name="drain3", enabled=True)
+        ]
+        runner.config.parsing.mode = "single"
+
+        trace = runner.run(
+            dataset="Bank", date="2021_03_04", hour=7,
+            traces_dir=str(tmp_path),
+        )
+
+        # Basic structure
+        assert trace.dataset == "Bank"
+        assert trace.date == "2021_03_04"
+        assert trace.hour == 7
+        assert trace.trace_id
+
+        # If Bank data available, check parsing worked
+        if trace.raw_log_count > 0:
+            assert "drain3" in trace.template_summary
+            assert trace.template_summary["drain3"] > 0
+            assert trace.timing.get("parsing", 0) > 0
+
+            # Context generated
+            assert len(trace.agent_contexts) > 0
+
+            # Trace was saved
+            trace_dir = os.path.join(str(tmp_path), trace.trace_id)
+            assert os.path.isdir(trace_dir)
+
+    def test_pipeline_with_ensemble(self, tmp_path):
+        """Pipeline with multiple drain3 instances to test ensemble."""
+        # Register same parser twice under different names to test ensemble.
+        # Note: both instances share Drain3Parser.name == "drain3", so
+        # per_parser dict keys will collide; the test validates that the
+        # ensemble pipeline runs without errors and produces results.
+        register_parser("drain3_v2", Drain3Parser)
+
+        runner = PipelineRunner(config_path="pipeline_config.yaml")
+        runner.config.parsing.parsers = [
+            ParserConfig(name="drain3", enabled=True),
+            ParserConfig(name="drain3_v2", enabled=True),
+        ]
+        runner.config.parsing.mode = "parallel"
+
+        trace = runner.run(
+            dataset="Bank", date="2021_03_04", hour=7,
+            traces_dir=str(tmp_path),
+        )
+
+        if trace.raw_log_count > 0:
+            # drain3 parser should have results (both instances share the name)
+            assert "drain3" in trace.template_summary
+            assert trace.template_summary["drain3"] > 0
+            # Ensemble results should exist
+            assert len(trace.ensemble_results) > 0
