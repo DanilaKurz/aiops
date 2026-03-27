@@ -1,6 +1,8 @@
+import os
 import pytest
 import yaml
 from pipeline.config import PipelineConfig, load_config, ParserConfig
+from pipeline.trace import PipelineTrace, save_trace, load_trace
 
 
 class TestPipelineConfig:
@@ -44,3 +46,44 @@ class TestPipelineConfig:
         config = load_config(str(path))
         assert config.parsing.mode == "parallel"
         assert config.agent.model == "gpt-5.4"
+
+
+class TestPipelineTrace:
+    def test_create_trace(self):
+        t = PipelineTrace(
+            dataset="Bank", date="2021_03_04", hour=7,
+            config_snapshot={"parsing": {"mode": "parallel"}},
+        )
+        assert t.trace_id  # auto-generated
+        assert t.dataset == "Bank"
+        assert t.raw_log_count == 0
+        assert t.parse_results == {}
+
+    def test_trace_has_all_sections(self):
+        t = PipelineTrace(dataset="Bank", date="2021_03_04", hour=7, config_snapshot={})
+        assert hasattr(t, "parse_results")
+        assert hasattr(t, "anomalies")
+        assert hasattr(t, "agent_contexts")
+        assert hasattr(t, "agent_results")
+        assert hasattr(t, "ground_truth")
+        assert hasattr(t, "timing")
+
+    def test_save_and_load(self, tmp_path):
+        t = PipelineTrace(
+            dataset="Bank", date="2021_03_04", hour=7,
+            config_snapshot={"test": True},
+        )
+        t.raw_log_count = 100
+        t.template_summary = {"drain3": 15}
+        trace_dir = save_trace(t, str(tmp_path))
+        loaded = load_trace(trace_dir)
+        assert loaded.dataset == "Bank"
+        assert loaded.config_snapshot == {"test": True}
+        assert loaded.raw_log_count == 100
+        assert loaded.template_summary == {"drain3": 15}
+
+    def test_save_creates_directory(self, tmp_path):
+        t = PipelineTrace(dataset="X", date="d", hour=0, config_snapshot={})
+        trace_dir = save_trace(t, str(tmp_path))
+        assert os.path.isdir(trace_dir)
+        assert os.path.isfile(os.path.join(trace_dir, "trace.json"))
