@@ -2,7 +2,7 @@ from app.agent.tools import TOOL_DEFINITIONS, get_tool_registry
 
 
 def test_tool_definitions_valid():
-    assert len(TOOL_DEFINITIONS) == 6
+    assert len(TOOL_DEFINITIONS) == 8
     for tool in TOOL_DEFINITIONS:
         assert tool["type"] == "function"
         assert "name" in tool
