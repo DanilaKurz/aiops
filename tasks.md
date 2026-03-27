@@ -1,59 +1,67 @@
-# AIOps MVP -- Task Board
+# AIOps -- Task Board
+
+## Phase 1: MVP (COMPLETE)
 
 **Plan:** `docs/superpowers/plans/2026-03-25-aiops-mvp.md`
 **Spec:** `docs/superpowers/specs/2026-03-25-aiops-mvp-design.md`
-
-**Status: ALL TASKS COMPLETE -- 31/31 tests passing**
+**Status: ALL 16 TASKS COMPLETE**
 
 ---
 
-## Batch 1 -- Foundation
+## Phase 2: Ensemble Pipeline
 
-| # | Task | Status |
-|---|------|--------|
-| 1 | Project scaffolding (config, models, db, requirements) | DONE |
-| 2 | Docker Compose + Dockerfile | DONE |
-| 12 | System prompt | DONE |
+**Plan:** `docs/superpowers/plans/2026-03-27-ensemble-pipeline.md`
+**Spec:** `docs/superpowers/specs/2026-03-27-ensemble-pipeline-design.md`
+**Status: INFRASTRUCTURE COMPLETE (12/17), PARSERS PENDING (5/17)**
 
-## Batch 2 -- Core Modules
+### Batch 1 -- Foundation + ABC
 
-| # | Task | Status |
-|---|------|--------|
-| 3 | OpenRCA data adapter | DONE |
-| 4 | Drain parser | DONE |
-| 5 | RAG module (ChromaDB) | DONE |
+| # | Task | Status | Verify |
+|---|------|--------|--------|
+| 1 | LogParser ABC + ParseResult + project structure | DONE | 7 tests |
+| 2 | Drain3 adapter (wrap existing into ABC) | DONE | 11 tests + Bank H7 |
 
-## Batch 3 -- Processing
+### Batch 2 -- Statistical Parsers
 
-| # | Task | Status |
-|---|------|--------|
-| 6 | Anomaly detection | DONE |
-| 7 | Agent tools (6 tools) | DONE |
+| # | Task | Status | Verify |
+|---|------|--------|--------|
+| 3 | LogLSHD integration | TODO | Bank H7 |
 
-## Batch 4 -- Integration Modules
+### Batch 3 -- LLM Parsers
 
-| # | Task | Status |
-|---|------|--------|
-| 8 | Keep alerter | DONE |
-| 9 | AI Investigator | DONE |
+| # | Task | Status | Verify |
+|---|------|--------|--------|
+| 4 | LILAC integration (LLM + cache) | TODO | Bank H7 |
+| 5 | LogParser-LLM integration (prefix tree + LLM) | TODO | Bank H7 |
+| 6 | DivLog integration (ICL, expensive) | TODO | Bank H7 sample |
+| 7 | Lemur integration (entropy + CoT, dual role) | TODO | Bank H7 |
 
-## Batch 5 -- API Layer
+### Batch 4 -- Ensemble + Pipeline Infra
 
-| # | Task | Status |
-|---|------|--------|
-| 10 | API routes -- pipeline (ingest, clusters, anomalies, stats) | DONE |
-| 11 | API routes -- agent (investigate, reports, benchmark) | DONE |
+| # | Task | Status | Verify |
+|---|------|--------|--------|
+| 8 | EnsembleParser (voting, cascade, single) | DONE | 7 tests |
+| 9 | Pipeline config (YAML loader + validation) | DONE | 4 tests |
+| 10 | Pipeline trace (save/load) | DONE | 4 tests |
 
-## Batch 6 -- Assembly
+### Batch 5 -- Orchestration
 
-| # | Task | Status |
-|---|------|--------|
-| 13 | FastAPI main.py (lifespan, routers) | DONE |
-| 14 | Keep setup script | DONE |
-| 15 | Grafana provisioning (5 dashboards) | DONE |
+| # | Task | Status | Verify |
+|---|------|--------|--------|
+| 11 | Context formatter (JSON + Narrative, self-documenting) | DONE | 12 tests |
+| 12 | Pipeline runner (end-to-end orchestration) | DONE | 3 tests |
 
-## Batch 7 -- Verification
+### Batch 6 -- Agent + Benchmark
 
-| # | Task | Status |
-|---|------|--------|
-| 16 | Integration test (end-to-end) | DONE |
+| # | Task | Status | Verify |
+|---|------|--------|--------|
+| 13 | Agent tools (+2 новых, улучшить query_logs) | DONE | 8 tools |
+| 14 | Benchmark runner + scoring | DONE | 8 tests |
+
+### Batch 7 -- Docs + Integration
+
+| # | Task | Status | Verify |
+|---|------|--------|--------|
+| 15 | README.md (русский, лаконичный) | DONE | review |
+| 16 | Integration test (full pipeline Bank H7) | DONE | 13 tests |
+| 17 | Обновить tasks.md | DONE | review |
