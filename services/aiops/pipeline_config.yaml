@@ -1,0 +1,46 @@
+parsing:
+  mode: parallel
+  voting: majority
+  cascade_threshold: 0.7
+  parsers:
+    - name: drain3
+      enabled: true
+      params:
+        sim_th: 0.4
+        depth: 4
+    - name: loglshd
+      enabled: true
+    - name: lilac
+      enabled: true
+      params:
+        cache_size: 10000
+    - name: logparser_llm
+      enabled: true
+    - name: divlog
+      enabled: false
+      params:
+        sample_size: 100
+  consolidator:
+    name: lemur
+    enabled: true
+    params:
+      merge_threshold: 0.85
+
+context:
+  formats:
+    - json
+    - narrative
+
+agent:
+  model: gpt-5.4
+  fallback_model: gpt-4.1
+  max_iterations: 20
+
+benchmark:
+  datasets:
+    - Bank
+  dates:
+    - "2021_03_04"
+  hours:
+    - 7
+  save_traces: true
