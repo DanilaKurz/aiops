@@ -1,8 +1,10 @@
 import os
 import pytest
 import yaml
-from pipeline.config import PipelineConfig, load_config, ParserConfig
+from pipeline.config import PipelineConfig, load_config, ParserConfig, ParsingConfig
 from pipeline.trace import PipelineTrace, save_trace, load_trace
+from pipeline.runner import PipelineRunner, register_parser, _init_parsers, PARSER_REGISTRY
+from parsers.drain_parser import Drain3Parser
 
 
 class TestPipelineConfig:
@@ -87,3 +89,38 @@ class TestPipelineTrace:
         trace_dir = save_trace(t, str(tmp_path))
         assert os.path.isdir(trace_dir)
         assert os.path.isfile(os.path.join(trace_dir, "trace.json"))
+
+
+class TestPipelineRunner:
+    def setup_method(self):
+        """Register drain3 parser for each test."""
+        PARSER_REGISTRY.clear()
+        register_parser("drain3", Drain3Parser)
+
+    def test_create_runner(self):
+        runner = PipelineRunner(config_path="pipeline_config.yaml")
+        assert runner.config.parsing.mode == "parallel"
+
+    def test_init_parsers_from_config(self):
+        config = PipelineConfig(
+            parsing=ParsingConfig(
+                parsers=[
+                    ParserConfig(name="drain3", enabled=True),
+                    ParserConfig(name="nonexistent", enabled=True),
+                    ParserConfig(name="drain3", enabled=False),
+                ]
+            )
+        )
+        parsers = _init_parsers(config)
+        assert len(parsers) == 1
+        assert parsers[0].name == "drain3"
+
+    def test_run_returns_trace(self):
+        """Run with drain3 only on Bank H7 if data exists."""
+        runner = PipelineRunner(config_path="pipeline_config.yaml")
+        trace = runner.run(dataset="Bank", date="2021_03_04", hour=7)
+        assert trace.dataset == "Bank"
+        assert trace.trace_id
+        # May be 0 if Bank data not available in test env
+        assert isinstance(trace.raw_log_count, int)
+        assert "parsing" in trace.timing or trace.raw_log_count == 0
