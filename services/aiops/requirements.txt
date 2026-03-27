@@ -11,3 +11,4 @@ openai==1.82.*
 chromadb==0.6.*
 pytest==8.3.*
 pytest-asyncio==0.25.*
+pyyaml==6.0.*
