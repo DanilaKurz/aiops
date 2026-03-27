@@ -121,3 +121,44 @@ class TestLogParserABC:
         assert results[1].template == "T2"
         assert results[2].template == "T3"
         assert parser._call_count == 3
+
+
+# ---------------------------------------------------------------------------
+# Drain3Parser tests
+# ---------------------------------------------------------------------------
+from parsers.drain_parser import Drain3Parser
+
+
+class TestDrain3Parser:
+    def test_is_log_parser(self):
+        p = Drain3Parser()
+        assert isinstance(p, LogParser)
+        assert p.name == "drain3"
+        assert p.requires_llm is False
+
+    def test_parse_single_line(self):
+        p = Drain3Parser()
+        result = p.parse("[GC (Allocation Failure) 15234ms]")
+        assert isinstance(result, ParseResult)
+        assert result.parser_name == "drain3"
+        assert result.cluster_id >= 0
+        assert 0.0 <= result.confidence <= 1.0
+
+    def test_parse_batch(self):
+        p = Drain3Parser()
+        lines = [
+            "[GC (Allocation Failure) 15234ms]",
+            "[GC (Allocation Failure) 8921ms]",
+            "Connection established to 10.0.0.1:6379",
+        ]
+        results = p.parse_batch(lines)
+        assert len(results) == 3
+        assert all(isinstance(r, ParseResult) for r in results)
+        assert results[0].cluster_id == results[1].cluster_id
+
+    def test_reset_clears_state(self):
+        p = Drain3Parser()
+        p.parse("[GC (Allocation Failure) 15234ms]")
+        assert len(p.get_clusters()) > 0
+        p.reset()
+        assert len(p.get_clusters()) == 0
