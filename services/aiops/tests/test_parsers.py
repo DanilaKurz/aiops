@@ -235,3 +235,186 @@ class TestLogLSHDParser:
     def test_version(self):
         p = LogLSHDParser()
         assert p.version == "1.0"
+
+
+# ---------------------------------------------------------------------------
+# LILACParser tests
+# ---------------------------------------------------------------------------
+from parsers.lilac_parser import LILACParser
+
+
+class TestLILACParser:
+    def test_is_log_parser(self):
+        p = LILACParser()
+        assert isinstance(p, LogParser)
+        assert p.name == "lilac"
+        assert p.requires_llm is True
+
+    def test_version(self):
+        p = LILACParser()
+        assert p.version == "1.0"
+
+    def test_no_api_key_returns_fallback(self):
+        p = LILACParser(api_key="")
+        result = p.parse("Connection established to 10.0.0.1:6379")
+        assert result.confidence == 0.0
+        assert result.parser_name == "lilac"
+        assert result.metadata["source"] == "fallback"
+
+    def test_no_api_key_fallback_uses_normalisation(self):
+        """Without API key the parser still normalises variables via regex."""
+        p = LILACParser(api_key="")
+        result = p.parse("Connection established to 10.0.0.1:6379")
+        assert "<*>" in result.template
+
+    def test_cache_stats_initial(self):
+        p = LILACParser()
+        assert p.stats["llm_calls"] == 0
+        assert p.stats["cache_hits"] == 0
+        assert p.stats["cache_rate"] == 0.0
+
+    def test_reset_clears_cache(self):
+        p = LILACParser()
+        p._template_cache["test"] = "template"
+        p._llm_calls = 5
+        p._cache_hits = 10
+        p.reset()
+        assert len(p._template_cache) == 0
+        assert p._llm_calls == 0
+        assert p._cache_hits == 0
+
+    def test_parse_batch_empty(self):
+        p = LILACParser()
+        results = p.parse_batch([])
+        assert results == []
+
+    def test_parse_batch_returns_list(self):
+        p = LILACParser(api_key="")
+        lines = ["line one", "line two"]
+        results = p.parse_batch(lines)
+        assert len(results) == 2
+        assert all(isinstance(r, ParseResult) for r in results)
+
+    def test_fallback_cluster_id_is_deterministic(self):
+        """Same log line should produce the same cluster_id in fallback."""
+        p = LILACParser(api_key="")
+        r1 = p.parse("test line 123")
+        r2 = p.parse("test line 123")
+        assert r1.cluster_id == r2.cluster_id
+
+    def test_cache_eviction(self):
+        """When cache_size is exceeded, oldest entries are evicted."""
+        p = LILACParser(api_key="", cache_size=2)
+        p._template_cache["a"] = "tmpl_a"
+        p._template_cache["b"] = "tmpl_b"
+        # Inserting a third should evict the first
+        p._put_cache("c", "tmpl_c")
+        assert "a" not in p._template_cache
+        assert "b" in p._template_cache
+        assert "c" in p._template_cache
+
+
+# ---------------------------------------------------------------------------
+# LogParserLLMParser tests
+# ---------------------------------------------------------------------------
+from parsers.logparser_llm_parser import LogParserLLMParser
+
+
+class TestLogParserLLMParser:
+    def test_is_log_parser(self):
+        p = LogParserLLMParser()
+        assert isinstance(p, LogParser)
+        assert p.name == "logparser_llm"
+        assert p.requires_llm is True
+
+    def test_version(self):
+        p = LogParserLLMParser()
+        assert p.version == "1.0"
+
+    def test_no_api_key_still_works(self):
+        """Parser must produce valid results even without an API key."""
+        p = LogParserLLMParser(api_key="")
+        result = p.parse("[GC (Allocation Failure) 15234ms]")
+        assert isinstance(result, ParseResult)
+        assert result.parser_name == "logparser_llm"
+        assert 0.0 <= result.confidence <= 1.0
+
+    def test_prefix_tree_learns(self):
+        """Second similar line should be matched by the prefix tree."""
+        p = LogParserLLMParser(api_key="")
+        p.parse("[GC (Allocation Failure) 15234ms]")
+        p.parse("[GC (Allocation Failure) 8921ms]")
+        assert p.stats["tree_matches"] >= 1
+
+    def test_prefix_tree_same_template(self):
+        """Similar lines should produce the same template after learning."""
+        p = LogParserLLMParser(api_key="")
+        r1 = p.parse("Connection established to 10.0.0.1:6379")
+        r2 = p.parse("Connection established to 10.0.0.2:6379")
+        assert r1.template == r2.template
+        assert r1.cluster_id == r2.cluster_id
+
+    def test_different_patterns_get_different_clusters(self):
+        """Structurally different lines should get different cluster IDs."""
+        p = LogParserLLMParser(api_key="")
+        r1 = p.parse("[GC (Allocation Failure) 15234ms]")
+        r2 = p.parse("Connection established to 10.0.0.1:6379")
+        assert r1.cluster_id != r2.cluster_id
+
+    def test_reset(self):
+        """Reset must clear all internal state."""
+        p = LogParserLLMParser()
+        p.parse("test line 123")
+        p.parse("test line 456")
+        p.reset()
+        assert p.stats["tree_matches"] == 0
+        assert p.stats["llm_calls"] == 0
+        assert p.stats["tree_hit_rate"] == 0.0
+
+    def test_stats_initial(self):
+        p = LogParserLLMParser()
+        assert p.stats["tree_matches"] == 0
+        assert p.stats["llm_calls"] == 0
+        assert p.stats["tree_hit_rate"] == 0.0
+
+    def test_parse_batch(self):
+        p = LogParserLLMParser(api_key="")
+        lines = [
+            "[GC (Allocation Failure) 15234ms]",
+            "[GC (Allocation Failure) 8921ms]",
+            "Connection established to 10.0.0.1:6379",
+        ]
+        results = p.parse_batch(lines)
+        assert len(results) == 3
+        assert all(isinstance(r, ParseResult) for r in results)
+        # First two lines should share a template
+        assert results[0].template == results[1].template
+
+    def test_parse_batch_empty(self):
+        p = LogParserLLMParser()
+        results = p.parse_batch([])
+        assert results == []
+
+    def test_heuristic_replaces_numbers(self):
+        """Heuristic template extraction should replace numbers with <*>."""
+        p = LogParserLLMParser(api_key="")
+        result = p.parse("Request processed in 1234 ms with code 200")
+        assert "<*>" in result.template
+        assert "Request" in result.template
+
+    def test_metadata_source_field(self):
+        """Metadata should indicate the source (prefix_tree or heuristic)."""
+        p = LogParserLLMParser(api_key="")
+        r1 = p.parse("Error code 500 on server 10.0.0.1")
+        assert r1.metadata["source"] in ("heuristic", "llm")
+        # Parse again -- should come from prefix tree
+        r2 = p.parse("Error code 404 on server 10.0.0.2")
+        assert r2.metadata["source"] == "prefix_tree"
+
+    def test_tree_hit_rate_increases(self):
+        """Tree hit rate should increase as more similar lines are parsed."""
+        p = LogParserLLMParser(api_key="")
+        p.parse("User login from 192.168.1.1")
+        for i in range(10):
+            p.parse(f"User login from 192.168.1.{i + 2}")
+        assert p.stats["tree_hit_rate"] > 0.5
