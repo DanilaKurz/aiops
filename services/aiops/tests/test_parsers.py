@@ -162,3 +162,76 @@ class TestDrain3Parser:
         assert len(p.get_clusters()) > 0
         p.reset()
         assert len(p.get_clusters()) == 0
+
+
+# ---------------------------------------------------------------------------
+# LogLSHDParser tests
+# ---------------------------------------------------------------------------
+from parsers.loglshd_parser import LogLSHDParser
+
+
+class TestLogLSHDParser:
+    def test_is_log_parser(self):
+        p = LogLSHDParser()
+        assert isinstance(p, LogParser)
+        assert p.name == "loglshd"
+        assert p.requires_llm is False
+
+    def test_parse_single_line(self):
+        p = LogLSHDParser()
+        result = p.parse("[GC (Allocation Failure) 15234ms]")
+        assert isinstance(result, ParseResult)
+        assert result.parser_name == "loglshd"
+        assert result.cluster_id >= 0
+        assert 0.0 <= result.confidence <= 1.0
+
+    def test_parse_batch(self):
+        p = LogLSHDParser()
+        lines = [
+            "[GC (Allocation Failure) 15234ms]",
+            "[GC (Allocation Failure) 8921ms]",
+            "Connection established to 10.0.0.1:6379",
+            "Connection established to 10.0.0.2:6379",
+        ]
+        results = p.parse_batch(lines)
+        assert len(results) == 4
+        assert all(isinstance(r, ParseResult) for r in results)
+        assert all(r.parser_name == "loglshd" for r in results)
+
+    def test_parse_batch_empty(self):
+        p = LogLSHDParser()
+        results = p.parse_batch([])
+        assert results == []
+
+    def test_parse_batch_single_line(self):
+        p = LogLSHDParser()
+        results = p.parse_batch(["only one line here"])
+        assert len(results) == 1
+        assert isinstance(results[0], ParseResult)
+
+    def test_reset(self):
+        p = LogLSHDParser()
+        p.parse_batch(["test line"])
+        p.reset()
+        # After reset, internal template dict should be cleared
+        assert p._template_dict == {}
+
+    def test_parse_batch_clusters_similar_lines(self):
+        """Similar log lines should ideally get the same template."""
+        p = LogLSHDParser()
+        lines = [
+            "Connection established to 10.0.0.1:6379",
+            "Connection established to 10.0.0.2:6379",
+            "Connection established to 10.0.0.3:6379",
+            "Connection established to 192.168.1.1:6379",
+        ]
+        results = p.parse_batch(lines)
+        # All four lines are structurally identical -- they should
+        # share the same template (or at worst the same cluster_id).
+        templates = set(r.template for r in results)
+        # With DTW, these should collapse to 1 or 2 templates
+        assert len(templates) <= 2
+
+    def test_version(self):
+        p = LogLSHDParser()
+        assert p.version == "1.0"
