@@ -418,3 +418,104 @@ class TestLogParserLLMParser:
         for i in range(10):
             p.parse(f"User login from 192.168.1.{i + 2}")
         assert p.stats["tree_hit_rate"] > 0.5
+
+
+# ---------------------------------------------------------------------------
+# DivLogParser tests
+# ---------------------------------------------------------------------------
+from parsers.divlog_parser import DivLogParser
+
+
+class TestDivLogParser:
+    def test_is_log_parser(self):
+        p = DivLogParser()
+        assert isinstance(p, LogParser)
+        assert p.name == "divlog"
+        assert p.requires_llm is True
+
+    def test_sample_size_config(self):
+        p = DivLogParser(sample_size=50)
+        assert p._sample_size == 50
+
+    def test_no_api_key_uses_heuristic(self):
+        p = DivLogParser(api_key="")
+        result = p.parse("[GC 15234ms from 10.0.0.1]")
+        assert result.confidence == 0.3
+        assert "<*>" in result.template
+        assert result.metadata["source"] == "heuristic"
+
+    def test_cache_works(self):
+        p = DivLogParser(api_key="")
+        p.parse("[GC 100ms]")
+        r2 = p.parse("[GC 200ms]")
+        assert r2.metadata["source"] == "cache"
+
+    def test_reset(self):
+        p = DivLogParser()
+        p.parse("test")
+        p.reset()
+        assert p.stats["llm_calls"] == 0
+        assert p.stats["cache_size"] == 0
+
+    def test_stats(self):
+        p = DivLogParser(sample_size=10)
+        assert p.stats["sample_size"] == 10
+        assert p.stats["llm_calls"] == 0
+
+
+# ---------------------------------------------------------------------------
+# LemurParser tests
+# ---------------------------------------------------------------------------
+from parsers.lemur_parser import LemurParser
+
+
+class TestLemurParser:
+    def test_is_log_parser(self):
+        p = LemurParser()
+        assert isinstance(p, LogParser)
+        assert p.name == "lemur"
+
+    def test_parse_batch_entropy(self):
+        p = LemurParser()
+        lines = [
+            "[GC (Allocation Failure) 15234ms]",
+            "[GC (Allocation Failure) 8921ms]",
+            "[GC (Allocation Failure) 3456ms]",
+            "Connection to 10.0.0.1 established",
+            "Connection to 10.0.0.2 established",
+        ]
+        results = p.parse_batch(lines)
+        assert len(results) == 5
+        # GC lines should get same template (numbers are high entropy)
+        gc_templates = set(r.template for r in results[:3])
+        assert len(gc_templates) == 1  # all same template
+        # Connection lines should differ from GC
+        conn_template = results[3].template
+        assert conn_template != results[0].template
+
+    def test_consolidate_without_api(self):
+        p = LemurParser(api_key="")
+        templates = [
+            "GC (Allocation Failure) <*>ms",
+            "GC (<*> Failure) <*>",
+            "GC (Allocation Failure) <DURATION>ms",
+        ]
+        merged = p.consolidate(templates)
+        assert len(merged) <= len(templates)
+
+    def test_consolidate_empty(self):
+        p = LemurParser()
+        assert p.consolidate([]) == []
+
+    def test_reset(self):
+        p = LemurParser()
+        p.parse_batch(["test line 1", "test line 2"])
+        p.reset()
+        assert p.stats["line_count"] == 0
+        assert p.stats["template_count"] == 0
+
+    def test_stats(self):
+        p = LemurParser()
+        p.parse_batch(["line one", "line two"])
+        assert p.stats["line_count"] == 2
+        assert p.stats["template_count"] > 0
