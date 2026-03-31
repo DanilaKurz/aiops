@@ -169,3 +169,56 @@ class TestCriticalPathAnalyzer:
     def test_reset(self):
         a = CriticalPathAnalyzer()
         a.reset()
+
+
+from traces.dependency_builder import DependencyBuilder
+
+
+class TestDependencyBuilder:
+    def test_is_trace_analyzer(self):
+        b = DependencyBuilder()
+        assert isinstance(b, TraceAnalyzer)
+        assert b.name == "dependency_builder"
+
+    def test_build_graph(self):
+        df = pd.DataFrame({
+            "timestamp": [1, 2, 3, 4],
+            "cmdb_id": ["frontend", "backend", "backend", "database"],
+            "span_id": ["s1", "s2", "s3", "s4"],
+            "parent_id": ["", "s1", "s1", "s2"],
+            "trace_id": ["t1", "t1", "t1", "t1"],
+            "duration": [100, 50, 30, 20],
+        })
+        b = DependencyBuilder()
+        results = b.analyze(df)
+        assert len(results) == 1
+        graph = results[0].details
+        assert graph["node_count"] == 3  # frontend, backend, database
+        assert graph["edge_count"] == 2  # frontend->backend, backend->database
+
+    def test_no_self_edges(self):
+        df = pd.DataFrame({
+            "timestamp": [1, 2],
+            "cmdb_id": ["svc1", "svc1"],
+            "span_id": ["s1", "s2"],
+            "parent_id": ["", "s1"],
+            "trace_id": ["t1", "t1"],
+            "duration": [10, 5],
+        })
+        b = DependencyBuilder()
+        results = b.analyze(df)
+        assert results[0].details["edge_count"] == 0
+
+    def test_empty_df(self):
+        b = DependencyBuilder()
+        results = b.analyze(pd.DataFrame())
+        assert results == []
+
+    def test_reset(self):
+        b = DependencyBuilder()
+        b.analyze(pd.DataFrame({
+            "timestamp": [1], "cmdb_id": ["a"], "span_id": ["s1"],
+            "parent_id": [""], "trace_id": ["t1"], "duration": [10]
+        }))
+        b.reset()
+        assert b.get_graph() == {"nodes": [], "edges": []}
