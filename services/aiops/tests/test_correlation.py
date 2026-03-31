@@ -131,3 +131,48 @@ class TestTopologicalCorrelator:
     def test_reset(self):
         c = TopologicalCorrelator()
         c.reset()
+
+
+from correlation.noise_filter import NoiseFilter
+
+
+class TestNoiseFilter:
+    def test_is_correlator(self):
+        f = NoiseFilter()
+        assert isinstance(f, Correlator)
+        assert f.name == "noise_filter"
+
+    def test_filter_chronic(self):
+        metrics = [{"component": "noisy", "timestamp": str(i)} for i in range(10)]
+        metrics.append({"component": "real_issue", "timestamp": "100"})
+        f = NoiseFilter(chronic_hours=6)
+        incidents = f.correlate([], metrics, [], {})
+        if incidents:
+            assert "real_issue" in incidents[0].components
+            assert incidents[0].details["chronic_count"] > 0
+
+    def test_all_acute(self):
+        metrics = [
+            {"component": "A", "timestamp": "100"},
+            {"component": "B", "timestamp": "200"},
+        ]
+        f = NoiseFilter(chronic_hours=6)
+        incidents = f.correlate([], metrics, [], {})
+        assert len(incidents) == 1
+        assert len(incidents[0].components) == 2
+
+    def test_empty(self):
+        f = NoiseFilter()
+        assert f.correlate([], [], [], {}) == []
+
+    def test_noise_reduction_stats(self):
+        metrics = [{"component": "noisy", "timestamp": str(i)} for i in range(20)]
+        metrics.append({"component": "signal", "timestamp": "100"})
+        f = NoiseFilter(chronic_hours=6)
+        incidents = f.correlate([], metrics, [], {})
+        if incidents:
+            assert "noise_reduction" in incidents[0].details
+
+    def test_reset(self):
+        f = NoiseFilter()
+        f.reset()
