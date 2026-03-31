@@ -14,3 +14,4 @@ pytest-asyncio==0.25.*
 pyyaml==6.0.*
 ruptures==1.1.*
 pyod==2.0.*
+statsmodels==0.14.*
