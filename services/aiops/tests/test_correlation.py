@@ -46,3 +46,88 @@ class TestCorrelatorABC:
         c = FakeCorrelator()
         results = c.correlate([], [], [], {})
         assert len(results) == 1
+
+
+from correlation.temporal import TemporalCorrelator
+
+
+class TestTemporalCorrelator:
+    def test_is_correlator(self):
+        c = TemporalCorrelator()
+        assert isinstance(c, Correlator)
+        assert c.name == "temporal"
+
+    def test_group_close_events(self):
+        metrics = [
+            {"timestamp": "100", "component": "Redis02", "metric": "cpu"},
+            {"timestamp": "120", "component": "Tomcat01", "metric": "mrt"},
+        ]
+        c = TemporalCorrelator(window_seconds=300)
+        incidents = c.correlate([], metrics, [], {})
+        assert len(incidents) == 1
+        assert "Redis02" in incidents[0].components
+        assert "Tomcat01" in incidents[0].components
+
+    def test_split_distant_events(self):
+        metrics = [
+            {"timestamp": "100", "component": "A"},
+            {"timestamp": "1000", "component": "B"},
+        ]
+        c = TemporalCorrelator(window_seconds=300)
+        incidents = c.correlate([], metrics, [], {})
+        assert len(incidents) == 2
+
+    def test_empty_input(self):
+        c = TemporalCorrelator()
+        assert c.correlate([], [], [], {}) == []
+
+    def test_reset(self):
+        c = TemporalCorrelator()
+        c.reset()
+
+
+from correlation.topological import TopologicalCorrelator
+
+
+class TestTopologicalCorrelator:
+    def test_is_correlator(self):
+        c = TopologicalCorrelator()
+        assert isinstance(c, Correlator)
+        assert c.name == "topological"
+
+    def test_find_upstream_root_cause(self):
+        topology = {
+            "edges": [
+                {"source": "frontend", "target": "backend"},
+                {"source": "backend", "target": "database"},
+            ]
+        }
+        metrics = [
+            {"component": "frontend", "timestamp": "100"},
+            {"component": "backend", "timestamp": "100"},
+            {"component": "database", "timestamp": "100"},
+        ]
+        c = TopologicalCorrelator()
+        incidents = c.correlate([], metrics, [], topology)
+        assert len(incidents) == 1
+        assert incidents[0].root_cause_candidate == "database"
+
+    def test_leaf_only_anomaly(self):
+        topology = {"edges": [{"source": "A", "target": "B"}]}
+        metrics = [{"component": "B", "timestamp": "100"}]
+        c = TopologicalCorrelator()
+        incidents = c.correlate([], metrics, [], topology)
+        assert incidents[0].root_cause_candidate == "B"
+
+    def test_empty_topology(self):
+        c = TopologicalCorrelator()
+        incidents = c.correlate([], [{"component": "X"}], [], {})
+        assert incidents == []
+
+    def test_no_anomalies(self):
+        c = TopologicalCorrelator()
+        assert c.correlate([], [], [], {"edges": []}) == []
+
+    def test_reset(self):
+        c = TopologicalCorrelator()
+        c.reset()
