@@ -2,66 +2,67 @@
 
 ## Phase 1: MVP (COMPLETE)
 
-**Plan:** `docs/superpowers/plans/2026-03-25-aiops-mvp.md`
 **Spec:** `docs/superpowers/specs/2026-03-25-aiops-mvp-design.md`
-**Status: ALL 16 TASKS COMPLETE**
+**Status: COMPLETE**
 
 ---
 
 ## Phase 2: Ensemble Pipeline (COMPLETE)
 
-**Plan:** `docs/superpowers/plans/2026-03-27-ensemble-pipeline.md`
 **Spec:** `docs/superpowers/specs/2026-03-27-ensemble-pipeline-design.md`
-**Status: ALL 17 TASKS COMPLETE -- 129/129 tests passing**
+**Status: COMPLETE -- 129/129 tests**
 
-### Batch 1 -- Foundation + ABC
+---
 
-| # | Task | Status | Verify |
-|---|------|--------|--------|
-| 1 | LogParser ABC + ParseResult + project structure | DONE | 7 tests |
-| 2 | Drain3 adapter (wrap existing into ABC) | DONE | 4 tests + Bank H7 |
+## Phase 3: Monitoring Tools (Tier 1)
 
-### Batch 2 -- Statistical Parsers
+**Spec:** `docs/superpowers/specs/2026-03-31-monitoring-tools-design.md`
+**Plan:** `docs/superpowers/plans/2026-03-31-monitoring-tools.md`
+**Status: IN PROGRESS**
 
-| # | Task | Status | Verify |
-|---|------|--------|--------|
-| 3 | LogLSHD integration (LSH+DTW) | DONE | 8 tests + Bank H7 (33 templates) |
+### Batch 1 -- Foundation
 
-### Batch 3 -- LLM Parsers
+| # | Task | Status | Files | Verify |
+|---|------|--------|-------|--------|
+| 1 | ABC interfaces (MetricDetector, TraceAnalyzer, Correlator) + dirs | TODO | metrics/base.py, traces/base.py, correlation/base.py | pytest |
 
-| # | Task | Status | Verify |
-|---|------|--------|--------|
-| 4 | LILAC integration (LLM + adaptive cache) | DONE | 10 tests |
-| 5 | LogParser-LLM integration (prefix tree + LLM) | DONE | 13 tests |
-| 6 | DivLog integration (ICL, diversity sampling) | DONE | 6 tests |
-| 7 | Lemur integration (entropy + CoT, dual role) | DONE | 6 tests |
+### Batch 2 -- Metric Detectors (parallel)
 
-### Batch 4 -- Ensemble + Pipeline Infra
+| # | Task | Status | Files | Verify |
+|---|------|--------|-------|--------|
+| 2 | ruptures/PELT change point detection | TODO | metrics/ruptures_detector.py | Bank metrics |
+| 3 | STL/MSTL seasonal decomposition | TODO | metrics/stl_detector.py | Bank metrics |
+| 4 | OneShotSTL streaming decomposition | TODO | metrics/oneshot_stl_detector.py | Bank metrics |
+| 5 | PyOD ensemble (IForest+LOF+OCSVM) | TODO | metrics/pyod_detector.py | Bank metrics |
+| 6 | BARO root cause ranking | TODO | metrics/baro_detector.py | Bank metrics |
+| 7 | MetricEnsemble (combine detectors) | TODO | metrics/ensemble.py | pytest |
 
-| # | Task | Status | Verify |
-|---|------|--------|--------|
-| 8 | EnsembleParser (voting, cascade, single) | DONE | 7 tests |
-| 9 | Pipeline config (YAML loader + validation) | DONE | 4 tests |
-| 10 | Pipeline trace (save/load) | DONE | 4 tests |
+### Batch 3 -- Trace Analyzers (parallel)
 
-### Batch 5 -- Orchestration
+| # | Task | Status | Files | Verify |
+|---|------|--------|-------|--------|
+| 8 | Span latency/error analyzer | TODO | traces/span_analyzer.py | Bank traces |
+| 9 | Service dependency graph builder | TODO | traces/dependency_builder.py | Bank traces |
+| 10 | Critical path extraction | TODO | traces/critical_path.py | Bank traces |
 
-| # | Task | Status | Verify |
-|---|------|--------|--------|
-| 11 | Context formatter (JSON + Narrative, self-documenting) | DONE | 12 tests |
-| 12 | Pipeline runner (end-to-end orchestration + CLI) | DONE | 3 tests |
+### Batch 4 -- Correlators (parallel)
 
-### Batch 6 -- Agent + Benchmark
+| # | Task | Status | Files | Verify |
+|---|------|--------|-------|--------|
+| 11 | Temporal co-occurrence | TODO | correlation/temporal.py | pytest |
+| 12 | Topological upstream walk | TODO | correlation/topological.py | pytest |
+| 13 | Noise filter (chronic/acute + entropy) | TODO | correlation/noise_filter.py | pytest |
 
-| # | Task | Status | Verify |
-|---|------|--------|--------|
-| 13 | Agent tools (+2 новых, улучшить query_logs) | DONE | 8 tools |
-| 14 | Benchmark runner + scoring | DONE | 8 tests |
+### Batch 5 -- Pipeline Integration
 
-### Batch 7 -- Docs + Integration
+| # | Task | Status | Files | Verify |
+|---|------|--------|-------|--------|
+| 14 | Pipeline config (+ metrics/traces/correlation YAML) | TODO | pipeline/config.py, pipeline_config.yaml | pytest |
+| 15 | Pipeline runner + trace (new stages) | TODO | pipeline/runner.py, pipeline/trace.py | Bank H7 e2e |
 
-| # | Task | Status | Verify |
-|---|------|--------|--------|
-| 15 | README.md (русский, лаконичный) | DONE | review |
-| 16 | Integration test (full pipeline Bank H7) | DONE | 2 e2e tests |
-| 17 | Обновить tasks.md | DONE | review |
+### Batch 6 -- Output
+
+| # | Task | Status | Files | Verify |
+|---|------|--------|-------|--------|
+| 16 | Full comparison run + Excel report | TODO | run_monitoring_comparison.py | Excel |
+| 17 | Update tasks.md + README | TODO | tasks.md, README.md | review |
