@@ -49,3 +49,123 @@ class TestTraceAnalyzerABC:
         a = FakeAnalyzer()
         results = a.analyze(pd.DataFrame())
         assert len(results) == 1
+
+
+from traces.span_analyzer import SpanAnalyzer
+
+
+class TestSpanAnalyzer:
+    def test_is_trace_analyzer(self):
+        a = SpanAnalyzer()
+        assert isinstance(a, TraceAnalyzer)
+        assert a.name == "span_analyzer"
+
+    def test_detect_slow_span(self):
+        df = pd.DataFrame({
+            "timestamp": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+            "cmdb_id": ["svc1"] * 10,
+            "span_id": [f"s{i}" for i in range(10)],
+            "parent_id": [""] * 10,
+            "trace_id": ["t1"] * 5 + ["t2"] * 5,
+            "duration": [10, 12, 11, 13, 500, 10, 11, 12, 10, 11],
+        })
+        a = SpanAnalyzer(latency_threshold_multiplier=3.0)
+        results = a.analyze(df)
+        anomalous = [r for r in results if r.is_anomalous]
+        assert len(anomalous) >= 1  # t1 has span with 500ms
+
+    def test_no_anomaly_uniform(self):
+        df = pd.DataFrame({
+            "timestamp": range(10),
+            "cmdb_id": ["svc1"] * 10,
+            "span_id": [f"s{i}" for i in range(10)],
+            "parent_id": [""] * 10,
+            "trace_id": ["t1"] * 10,
+            "duration": [10, 11, 10, 12, 10, 11, 10, 11, 10, 12],
+        })
+        a = SpanAnalyzer(latency_threshold_multiplier=3.0)
+        results = a.analyze(df)
+        assert all(not r.is_anomalous for r in results)
+
+    def test_bottleneck_identified(self):
+        df = pd.DataFrame({
+            "timestamp": [1, 2, 3],
+            "cmdb_id": ["fast", "fast", "slow"],
+            "span_id": ["s1", "s2", "s3"],
+            "parent_id": ["", "s1", "s1"],
+            "trace_id": ["t1", "t1", "t1"],
+            "duration": [5, 10, 500],
+        })
+        a = SpanAnalyzer()
+        results = a.analyze(df)
+        assert results[0].bottleneck_service == "slow"
+
+    def test_empty_df(self):
+        a = SpanAnalyzer()
+        results = a.analyze(pd.DataFrame())
+        assert results == []
+
+    def test_reset(self):
+        a = SpanAnalyzer()
+        a.reset()
+
+
+from traces.critical_path import CriticalPathAnalyzer
+
+
+class TestCriticalPathAnalyzer:
+    def test_is_trace_analyzer(self):
+        a = CriticalPathAnalyzer()
+        assert isinstance(a, TraceAnalyzer)
+        assert a.name == "critical_path"
+
+    def test_find_critical_path(self):
+        # Tree: A(10) -> B(50), A(10) -> C(5)
+        # Critical path: A -> B (duration 60)
+        df = pd.DataFrame({
+            "timestamp": [1, 2, 3],
+            "cmdb_id": ["A", "B", "C"],
+            "span_id": ["s1", "s2", "s3"],
+            "parent_id": ["", "s1", "s1"],
+            "trace_id": ["t1", "t1", "t1"],
+            "duration": [10, 50, 5],
+        })
+        a = CriticalPathAnalyzer()
+        results = a.analyze(df)
+        assert len(results) == 1
+        assert results[0].critical_path == ["A", "B"]
+        assert results[0].latency_ms == 60
+
+    def test_bottleneck_is_slowest(self):
+        df = pd.DataFrame({
+            "timestamp": [1, 2, 3],
+            "cmdb_id": ["fast", "fast", "slow"],
+            "span_id": ["s1", "s2", "s3"],
+            "parent_id": ["", "s1", "s2"],
+            "trace_id": ["t1", "t1", "t1"],
+            "duration": [1, 2, 100],
+        })
+        a = CriticalPathAnalyzer()
+        results = a.analyze(df)
+        assert results[0].bottleneck_service == "slow"
+
+    def test_multiple_traces(self):
+        df = pd.DataFrame({
+            "timestamp": [1, 2, 3, 4],
+            "cmdb_id": ["A", "B", "C", "D"],
+            "span_id": ["s1", "s2", "s3", "s4"],
+            "parent_id": ["", "s1", "", "s3"],
+            "trace_id": ["t1", "t1", "t2", "t2"],
+            "duration": [10, 20, 5, 15],
+        })
+        a = CriticalPathAnalyzer()
+        results = a.analyze(df)
+        assert len(results) == 2
+
+    def test_empty(self):
+        a = CriticalPathAnalyzer()
+        assert a.analyze(pd.DataFrame()) == []
+
+    def test_reset(self):
+        a = CriticalPathAnalyzer()
+        a.reset()
