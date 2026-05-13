@@ -1,0 +1,21 @@
+﻿Host,Events,Incidents,AutoResolve %,Service,Top L2 class,Среднее время жизни (мин)
+Tomcat02,48280,739,88.2,Tomcat02,JVM heap & GC давление,25.8
+Tomcat01,27490,734,90.1,Tomcat01,JVM heap & GC давление,20.5
+Mysql02,23841,574,87.5,Mysql02,Slow SQL queries,14.8
+Mysql01,21402,656,90.9,Mysql01,Slow SQL queries,9.3
+Tomcat03,12054,684,95.8,Tomcat03,JVM heap & GC давление,11.1
+Tomcat04,5454,706,95.9,Tomcat04,JVM heap & GC давление,11.0
+MG02,2162,103,96.1,MG02,JVM heap & GC давление,79.0
+apache01,668,219,87.7,apache01,Disk IO нагрузка,9.5
+dockerB1,511,510,100.0,dockerB1,CPU/Memory нагрузка,0.0
+ServiceTest4,468,212,95.3,ServiceTest4,Сетевые деградации,4.8
+ServiceTest7,387,172,95.9,ServiceTest7,Сетевые деградации,4.9
+ServiceTest3,386,185,97.3,ServiceTest3,Сетевые деградации,4.3
+ServiceTest6,384,177,97.7,ServiceTest6,Сетевые деградации,4.6
+ServiceTest9,374,184,96.2,ServiceTest9,Сетевые деградации,4.0
+ServiceTest1,331,146,97.3,ServiceTest1,Сетевые деградации,5.0
+ServiceTest8,331,146,96.6,ServiceTest8,Сетевые деградации,5.1
+ServiceTest5,330,146,96.6,ServiceTest5,Сетевые деградации,5.0
+ServiceTest2,330,133,94.7,ServiceTest2,Сетевые деградации,5.7
+ServiceTest11,321,138,97.8,ServiceTest11,Сетевые деградации,5.2
+ServiceTest10,309,149,96.6,ServiceTest10,Сетевые деградации,4.1

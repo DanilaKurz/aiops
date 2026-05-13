@@ -1,0 +1,4 @@
+﻿Source,Events,Hosts,Incidents,AutoResolve %,Top L2 class,Top service,Доля шума %
+Log Agent,136054,6,3367,91.4,JVM heap & GC давление,Tomcat02,92.8
+Prometheus,6573,18,2031,95.3,Disk IO нагрузка,MG02,4.5
+AppMonitor,3951,11,1788,96.5,Сетевые деградации,ServiceTest4,2.7
