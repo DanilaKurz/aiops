@@ -441,17 +441,32 @@ def make_verdict(row):
     return "Шум средней интенсивности, рассмотреть подъём severity"
 
 
+def _sample_l0(ts, raw, s, e):
+    def _ev(i):
+        r = str(raw[i]) if i < len(raw) else ""
+        return {"ts": str(ts[i])[:19], "raw": r[:200] + ("…" if len(r) > 200 else "")}
+    n_ev = int(e - s + 1)
+    if n_ev <= 20:
+        return [_ev(i) for i in range(s, e + 1)]
+    mid = {"ts": "...", "raw": f"... ещё {n_ev - 10} событий ..."}
+    return ([_ev(i) for i in range(s, s + 5)] +
+            [mid] +
+            [_ev(i) for i in range(e - 4, e + 1)])
+
 def make_series(events):
     rows = []
     for (rule, host), grp in events.groupby(["rule_id", "host"], sort=False):
-        ts = grp.sort_values("timestamp")["timestamp"].values
-        first = grp.sort_values("timestamp").iloc[0]
+        grp_s = grp.sort_values("timestamp")
+        ts = grp_s["timestamp"].values
+        raw = grp_s["raw_value"].values
+        first = grp_s.iloc[0]
         if len(ts) == 1:
             rows.append({
                 "rule_id": rule, "host": host,
                 "events_in_series": 1, "duration_s": 0,
                 "l2_class": first["l2_class"], "l1_template": first["l1_template"],
                 "source": first["source"], "service": first["service"],
+                "l0_events": [{"ts": str(ts[0])[:19], "raw": str(raw[0])}],
             })
             continue
         gaps = np.diff(ts).astype("timedelta64[s]").astype(int)
@@ -465,6 +480,7 @@ def make_series(events):
                 "events_in_series": int(e - s + 1), "duration_s": dur,
                 "l2_class": first["l2_class"], "l1_template": first["l1_template"],
                 "source": first["source"], "service": first["service"],
+                "l0_events": _sample_l0(ts, raw, s, e),
             })
     df = pd.DataFrame(rows)
     # auto-resolved = short series that closed by gap > GAP_MIN
@@ -724,12 +740,20 @@ def main():
         """Group series by (l1_template, source) → list of incident dicts sorted by host."""
         incidents = []
         for _, r in grp.iterrows():
+            l0 = r.get("l0_events")
+            if hasattr(l0, "tolist"):
+                l0 = l0.tolist()
+            elif hasattr(l0, "to_list"):
+                l0 = l0.to_list()
+            if l0 is None or (hasattr(l0, "__len__") and len(l0) == 0):
+                l0 = []
             incidents.append({
                 "host": r["host"],
                 "service": r.get("service", ""),
                 "events": int(r["events_in_series"]),
                 "duration_min": round(r["duration_s"] / 60, 1),
                 "auto_resolved": bool(r["auto_resolved"]),
+                "l0_events": l0,
             })
         # Sort by events descending
         incidents.sort(key=lambda x: -x["events"])

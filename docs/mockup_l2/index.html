@@ -697,18 +697,20 @@ function openModal(row) {
   const incs = row.incidents || [];
   let incHTML = "";
   if (incs.length > 0) {
-    // Find max events for bar scaling
     const maxEv = Math.max(...incs.map(i => i.events), 1);
     incHTML = `<div style="margin-top:14px"><b>Инциденты (${fmtNum(row["Инциденты"] || 0)} серий, показаны ${incs.length} крупнейших)</b>
-    <div style="max-height:260px;overflow-y:auto;margin-top:6px">
+    <div style="max-height:360px;overflow-y:auto;margin-top:6px">
     <table class="nested-table" style="margin-top:0"><thead><tr>
-      <th>Host</th><th>Service</th><th class="numeric">Событий</th><th class="numeric">Длит. (мин)</th><th class="numeric">AutoR</th><th>Бар</th>
+      <th></th><th>Host</th><th>Service</th><th class="numeric">Событий</th><th class="numeric">Длит. (мин)</th><th class="numeric">AutoR</th><th>Бар</th>
     </tr></thead><tbody>`;
-    incs.forEach(inc => {
+    incs.forEach((inc, incIdx) => {
       const barW = Math.max(2, (inc.events / maxEv) * 80);
       const autoColor = inc.auto_resolved ? "#d1fae5" : "#fee2e2";
       const autoText = inc.auto_resolved ? "✓" : "✗";
-      incHTML += `<tr>
+      const hasL0 = inc.l0_events && inc.l0_events.length > 0;
+      const incId = `modal-inc-${incIdx}`;
+      incHTML += `<tr style="cursor:pointer" onclick="toggleModalIncident('${incId}')">
+        <td><span class="toggle">▶</span></td>
         <td><b>${escapeHtml(inc.host)}</b></td>
         <td>${escapeHtml(inc.service)}</td>
         <td class="numeric">${fmtNum(inc.events)}</td>
@@ -716,11 +718,21 @@ function openModal(row) {
         <td style="background:${autoColor};text-align:center;font-size:12px">${autoText}</td>
         <td><svg width="100" height="14" viewBox="0 0 100 14"><rect x="0" y="3" width="${barW}" height="8" fill="#4f46e5" rx="2"/></svg></td>
       </tr>`;
+      if (hasL0) {
+        incHTML += `<tr class="l1-host-row" id="${incId}"><td colspan="7">`;
+        incHTML += `<div style="padding:8px 12px;font-size:12px">`;
+        incHTML += `<div style="color:#6b7280;margin-bottom:6px">L0-события инцидента (первые 5 + последние 5):</div>`;
+        incHTML += `<table class="nested-table" style="margin-top:0"><thead><tr><th style="width:160px">Timestamp</th><th>Событие L0</th></tr></thead><tbody>`;
+        inc.l0_events.forEach(ev => {
+          incHTML += `<tr><td style="font-family:monospace;font-size:11px;white-space:nowrap">${escapeHtml(ev.ts)}</td><td style="font-size:11px;word-break:break-all">${escapeHtml(ev.raw)}</td></tr>`;
+        });
+        incHTML += `</tbody></table></div></td></tr>`;
+      }
     });
     incHTML += `</tbody></table></div></div>`;
   }
 
-  body.innerHTML = pathHTML + staleHTML + `
+body.innerHTML = pathHTML + staleHTML + `
     <dl>
       <dt>Источник</dt><dd>${srcTagLink(row["Source"])}</dd>
       <dt>Severity</dt><dd>${sevChip(row["Severity"])}</dd>
@@ -735,6 +747,13 @@ function openModal(row) {
 }
 function closeModal() {
   document.getElementById("modal").classList.remove("show");
+}
+function toggleModalIncident(incId) {
+  const tr = document.getElementById(incId);
+  if (!tr) return;
+  const expanded = tr.classList.toggle("show");
+  const toggleEl = tr.previousElementSibling.querySelector(".toggle");
+  if (toggleEl) toggleEl.textContent = expanded ? "▼" : "▶";
 }
 document.getElementById("modal").addEventListener("click", e => {
   if (e.target.id === "modal") closeModal();
