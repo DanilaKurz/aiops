@@ -366,15 +366,23 @@ function sparklineSVG(data, width, height, color) {
   ).join(" ");
   return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5"/></svg>`;
 }
-function barChartSVG(data, width, height, color) {
+function barChartSVG(data, labels, width, height, color) {
   if (!data || data.length === 0) return "";
   const max = Math.max(...data, 1);
-  const barW = Math.max(2, Math.floor(width / data.length) - 1);
+  const barW = Math.max(2, Math.floor((width - 10) / data.length) - 1);
+  const labelH = labels ? 14 : 0;
+  const totalH = height + labelH;
   const bars = data.map((v, i) => {
     const h = Math.max(1, (v / max) * (height - 4));
-    return `<rect x="${i * (barW + 1)}" y="${height - h - 2}" width="${barW}" height="${h}" fill="${color}" rx="1"/>`;
+    const x = 5 + i * (barW + 1);
+    const y = height - h - 2 + labelH;
+    return `<rect x="${x}" y="${y}" width="${barW}" height="${h}" fill="${color}" rx="1"/>`;
   }).join("");
-  return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${bars}</svg>`;
+  const lbls = labels ? data.map((v, i) => {
+    const x = 5 + i * (barW + 1) + barW/2;
+    return `<text x="${x}" y="${totalH}" text-anchor="middle" font-size="8" fill="#9ca3af">${labels[i]||""}</text>`;
+  }).join("") : "";
+  return `<svg width="${width}" height="${totalH}" viewBox="0 0 ${width} ${totalH}">${bars}${lbls}</svg>`;
 }
 function stackedBarSVG(hostDayMatrix, dayLabels, dayTotals, width) {
   const hosts = Object.keys(hostDayMatrix).sort();
@@ -404,6 +412,23 @@ function stackedBarSVG(hostDayMatrix, dayLabels, dayTotals, width) {
     dayHtml += `<g transform="translate(${x}, 0)">${segs}</g>`;
   }
   return `<svg width="${width}" height="${chartH + 4}" viewBox="0 0 ${width} ${chartH + 4}">${dayHtml}</svg>`;
+}
+
+function hostBarSVG(hostEv, width, height) {
+  const entries = Object.entries(hostEv || {}).sort((a, b) => b[1] - a[1]);
+  if (entries.length === 0) return "";
+  const max = Math.max(...entries.map(e => e[1]), 1);
+  const barH = Math.max(6, Math.floor((height - 2) / entries.length) - 1);
+  const palette = ["#4f46e5","#059669","#b45309","#7c3aed","#dc2626","#0891b2","#ca8a04","#be185d"];
+  const bars = entries.map(([host, cnt], i) => {
+    const bw = Math.max(2, (cnt / max) * (width - 40));
+    const y = i * (barH + 1);
+    const color = palette[i % palette.length];
+    const pct = Math.round(100 * cnt / entries.reduce((s, e) => s + e[1], 0));
+    return `<rect x="0" y="${y}" width="${bw}" height="${barH}" fill="${color}" rx="1"/>
+      <text x="${bw + 2}" y="${y + barH - 2}" font-size="7" fill="#6b7280">${host}: ${cnt} (${pct}%)</text>`;
+  }).join("");
+  return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${bars}</svg>`;
 }
 
 // ===== Tooltips =====
@@ -461,8 +486,9 @@ function renderClassProfile(className, drillRows) {
     const bv = first["Burstiness P95/med"] || 0;
     const burstColor = bv > 2 ? "#b45309" : "#4f46e5";
     html += `<div class="cp-charts">
-      <div class="cp-chart"><div class="cp-chart-label">Burst ${bv > 2 ? '(⚠ пики)' : '(равномерно)'} P95/med=${bv}</div>${sparklineSVG(first.burst_5min, 200, 40, burstColor)}</div>
-      <div class="cp-chart"><div class="cp-chart-label">Дни (${first.day_counts ? first.day_counts.filter(d => d > 0).length + '/' + first.day_counts.length : '—'})</div>${barChartSVG(first.day_counts || [], 200, 40, "#059669")}</div>
+      <div class="cp-chart"><div class="cp-chart-label">Burst ${bv > 2 ? '(⚠ пики)' : '(равномерно)'} P95/med=${bv}</div>${sparklineSVG(first.burst_5min, 220, 40, burstColor)}</div>
+      <div class="cp-chart" style="max-width:220px"><div class="cp-chart-label" style="font-size:10px;white-space:normal">окна 5 мин: ${escapeHtml(first.burst_window_first || "—")} … ${escapeHtml(first.burst_window_last || "—")}</div></div>
+      <div class="cp-chart"><div class="cp-chart-label">Дни (${first.day_counts ? first.day_counts.filter(d => d > 0).length + '/' + first.day_counts.length : '—'})</div>${barChartSVG(first.day_counts || [], first.day_labels_short || [], 220, 50, "#059669")}</div>
       <div class="cp-chart"><div class="cp-chart-label">Распределение по хостам/дням</div>${stackedBarSVG(first.host_day_matrix || {}, first.day_labels || [], first.day_counts || [], 220)}</div>
     </div>`;
   }
@@ -544,8 +570,6 @@ function renderMain() {
     {k:"Среднее время жизни (мин)", label:"TTL мин", num:true},
     {k:"Самый шумный источник", label:"Top src"},
     {k:"Самый шумный host", label:"Top host"},
-    {k:"Самый шумный service", label:"Top svc"},
-    {k:"_cross_l2", label:"Cross-L2"},
     {k:"Вывод", label:"Вывод"},
   ];
   let h = "<thead><tr><th></th>";
@@ -567,7 +591,6 @@ function renderMain() {
       else if (c.k === "Источники") h += `<td>${String(v).split(",").map(s => srcTagLink(s.trim())).join(" ")}</td>`;
       else if (c.k === "Самый шумный источник") h += `<td>${srcTagLink(v)}</td>`;
       else if (c.k === "Вывод") h += `<td class="verdict">${escapeHtml(v)}</td>`;
-      else if (c.k === "_cross_l2") h += `<td>${crossL2Badge(row["Класс проблемы L2"])}</td>`;
       else if (c.num) h += `<td class="numeric">${fmtNum(v)}</td>`;
       else h += `<td>${escapeHtml(v)}</td>`;
     });
@@ -621,7 +644,7 @@ function renderDrill(rows) {
       <td class="numeric">${fmtNum(r["Инциденты"])}</td>
       <td>${pillFor(r["AutoResolve %"])}</td>
       <td class="numeric">${r["Среднее время жизни (мин)"]}</td>
-      <td class="numeric">${fmtNum(r["Events/host"])}</td>
+      <td>${hostBarSVG(r["host_ev"] || {}, 100, Math.max(18, (Object.keys(r["host_ev"] || {}).length) * 10))}</td>
       <td class="numeric">${r["Dedup ratio"]}</td>
       <td class="numeric">${r["Burstiness P95/med"]}</td>
       <td class="numeric">${r["Days active ratio"]}</td>
